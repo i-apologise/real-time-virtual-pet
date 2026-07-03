@@ -34,10 +34,11 @@ godot --headless --path . -s res://tests/run_tests.gd
 ## Never do
 
 - Merge with red CI
-- Open a PR without a Screenshots section with real media
+- Open a PR without committed screenshot files + paths listed in `## Screenshots`
+- Use a separate public repo only to host PR screenshots
 - Force-push to `main`
 - Skip the design plan sequence without an explicit decision to re-order
 
 ## Agent / automation note
 
-Agents implementing features **must** attach screenshots to every PR (capture via screenshot tool, Godot window, or CI artifact links pasted into the PR body). Forgetting screenshots is a process failure, not optional polish.
+Agents **must** commit screenshot files under `docs/pr-screenshots/` and list those paths in the PR body. Reviewers use **Files changed**. Do **not** create or use a public assets repo for PR images. Forgetting screenshot files is a process failure.

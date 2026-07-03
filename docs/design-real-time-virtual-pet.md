@@ -2099,7 +2099,7 @@ Do **not** implement in MVP:
 |------|--------|
 | Private remote | GitHub **private** repository; feature work via PRs into `main` |
 | Description | Every PR uses the template (Summary, Design ref, Changes, How to test, Risk, Checklist) |
-| Screenshots | **Mandatory on every PR** — embed ≥1 image under `## Screenshots` (UI, debug HUD, or terminal test output as images). Empty / placeholder / pure N/A fails CI |
+| Screenshots | **Mandatory on every PR** — commit images under `docs/pr-screenshots/`, list paths in `## Screenshots`; review in **Files changed**. No public assets repo |
 | CI | GitHub Actions: `PR Body (description + screenshots)`, `Repo structure`, `Godot tests` (runs when `project.godot` exists) |
 | Merge policy | Owner merges **only if** required checks are **green** and PR description + screenshots look good |
 

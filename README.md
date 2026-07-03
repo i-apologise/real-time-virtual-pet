@@ -42,9 +42,9 @@ See [`docs/concept-art/`](docs/concept-art/) for town, house care, park, store, 
 
 1. Branch from `main`.
 2. Open a **PR with a full description** (template enforced).
-3. **Always include screenshots** (UI, debug HUD, terminal test output, or Godot editor as appropriate). CI fails if the Screenshots section is missing or empty.
+3. **Always commit screenshots** under `docs/pr-screenshots/` and list paths in the PR body. Review them in **Files changed** (no public image host).
 4. **CI must be green** before merge.
-5. Owner merges only after reviewing the PR body + screenshots.
+5. Owner merges only after reviewing the PR body + **Files changed** screenshots.
 
 See [Contributing](CONTRIBUTING.md) and [PR standards](docs/PR_STANDARDS.md).
 

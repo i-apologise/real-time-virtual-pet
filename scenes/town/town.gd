@@ -101,7 +101,7 @@ func _build_world() -> void:
 	_human.move_speed = 105.0
 	_human.position = Vector2(232, 240)
 	_world.add_child(_human)
-	_human.setup_frames(SpriteFactoryScr.human_frames(), 3.0)
+	_human.setup_frames(SpriteFactoryScr.human_frames(), 2.0)
 	_human.setup_collision(false)
 
 	var cam := Camera2D.new()

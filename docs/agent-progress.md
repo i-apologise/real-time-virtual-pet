@@ -14,3 +14,4 @@
 | 2026-07-03 | Fixed merge conflict on PR #6 (`docs/agent-progress.md` only). |
 
 | 2026-07-03 | **PR #5 (C+D) MERGED.** Implementing **PR E** polish/export/validation (debug clock, dig hold, README 0.1.0). |
+| 2026-07-03 | Opened **PR #7 (E)** polish 0.1.0 — CI all green. Polling user merge. MVP loop complete pending E merge. |

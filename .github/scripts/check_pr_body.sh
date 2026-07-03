@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fail if PR body lacks required sections or Screenshots without an image.
+# Fail if PR body lacks required sections or Screenshots without listed committed paths.
 set -euo pipefail
 
 BODY_FILE="${1:-}"
@@ -15,45 +15,45 @@ fail() {
   exit 1
 }
 
-# Required headings (flexible ## or #)
 for heading in "Summary" "Changes" "How to test" "Screenshots" "Checklist"; do
   if ! echo "${body}" | grep -Eiq "^#{1,3}[[:space:]]*${heading}"; then
     fail "Missing required heading: '## ${heading}' (or # / ###). See docs/PR_STANDARDS.md"
   fi
 done
 
-# Extract screenshots section roughly until next heading
 screenshots_section="$(
   echo "${body}" | awk '
     BEGIN{IGNORECASE=1}
-    /^#{1,3}[[:space:]]*Screenshots/ {grab=1; next}
-    /^#{1,3}[[:space:]]/ {if(grab) exit}
+    /^##[[:space:]]+Screenshots/ {grab=1; next}
+    /^##[[:space:]]+/ {if(grab) exit}
     grab {print}
   '
 )"
 
 if [[ -z "${screenshots_section//[[:space:]]/}" ]]; then
-  fail "Screenshots section is empty. Embed at least one image. See docs/PR_STANDARDS.md"
-fi
-
-# Must contain an image: markdown image, HTML img, or GitHub attachment URL patterns
-if ! echo "${screenshots_section}" | grep -Eiq \
-  '!\[[^]]*\]\([^)]+\)|<img[[:space:]]|https://[^[:space:]]+\.(png|jpe?g|gif|webp)|user-images\.githubusercontent\.com|github\.com/user-attachments/assets/'; then
-  # Allow placeholder only if author clearly failed — we still fail on template placeholder
-  if echo "${screenshots_section}" | grep -Eq 'PASTE_OR_DROP_IMAGE_HERE'; then
-    fail "Screenshots still contain PASTE_OR_DROP_IMAGE_HERE — attach a real image."
-  fi
-  fail "Screenshots section must include at least one image (markdown ![alt](url), <img>, or GitHub attachment URL)."
+  fail "Screenshots section is empty. List committed image paths (e.g. docs/pr-screenshots/foo.png). See docs/PR_STANDARDS.md"
 fi
 
 if echo "${screenshots_section}" | grep -Eq 'PASTE_OR_DROP_IMAGE_HERE'; then
-  fail "Replace PASTE_OR_DROP_IMAGE_HERE with a real screenshot."
+  fail "Replace PASTE_OR_DROP_IMAGE_HERE with committed paths under docs/pr-screenshots/."
 fi
 
-# Reject pure N/A without images (belt and suspenders)
-if echo "${screenshots_section}" | grep -Eiq '^[Nn]/[Aa]/(\.|$)' \
-  && ! echo "${screenshots_section}" | grep -Eiq '!\[[^]]*\]\([^)]+\)|<img[[:space:]]|user-attachments/assets|user-images\.githubusercontent'; then
-  fail "Screenshots cannot be N/A without an embedded image. Capture terminal/tests/debug HUD instead."
+# Reject pure N/A with no path evidence
+if echo "${screenshots_section}" | grep -Eiq '^[Nn]/[Aa]\.?[[:space:]]*$' \
+  && ! echo "${screenshots_section}" | grep -Eiq '\.(png|jpe?g|gif|webp)\b|docs/pr-screenshots/|docs/concept-art/'; then
+  fail "Screenshots cannot be only N/A. Commit images and list paths for Files changed review."
 fi
 
-echo "PR body checks passed (required headings + screenshots with image evidence)."
+# Must list at least one image path (backticked, plain, or markdown link/image)
+if ! echo "${screenshots_section}" | grep -Eiq \
+  '(docs/pr-screenshots/|docs/concept-art/)[^[:space:])`'\''"]+\.(png|jpe?g|gif|webp)|[^[:space:]]+\.(png|jpe?g|gif|webp)'; then
+  fail "Screenshots section must list at least one image path (prefer docs/pr-screenshots/*.png). Reviewer uses Files changed — no public host required."
+fi
+
+# Soft-fail message if someone still points only at the old public assets repo without local paths
+if echo "${screenshots_section}" | grep -Eiq 'rtvp-pr-assets' \
+  && ! echo "${screenshots_section}" | grep -Eiq 'docs/pr-screenshots/'; then
+  fail "Do not use public rtvp-pr-assets as the only screenshot evidence. Commit files under docs/pr-screenshots/ and list those paths."
+fi
+
+echo "PR body checks passed (headings + Screenshots lists committed image path(s) for Files changed)."

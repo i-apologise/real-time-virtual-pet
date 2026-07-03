@@ -21,23 +21,25 @@
 ## Screenshots
 
 <!--
-REQUIRED. Do not delete this section.
-Embed at least one image (drag-drop in GitHub UI or markdown image links).
-Systems PRs: terminal test output and/or debug HUD counts as a screenshot.
+REQUIRED. Commit image files under docs/pr-screenshots/ on this branch.
+List paths below. Reviewer opens the Files changed tab (private repo — no public image host).
+Do not use a separate public assets repo.
 -->
 
-![Describe what this shows](PASTE_OR_DROP_IMAGE_HERE)
+Review in **Files changed**:
+
+- `docs/pr-screenshots/REPLACE_ME.png`
 
 ## Risk / rollback
 
 - Risk:
-- Rollback: revert this PR / previous save schema notes if any:
+- Rollback:
 
 ## Checklist
 
 - [ ] Description is complete (summary, changes, how to test, risk)
-- [ ] **Screenshots section has real image(s)** — never empty, never “N/A” without an image
+- [ ] Screenshot **files committed** under `docs/pr-screenshots/` (or listed concept-art)
+- [ ] **`## Screenshots` lists those paths** — review via Files changed, not a public repo
 - [ ] CI is green (or will be after push)
 - [ ] Scope matches the design plan milestone
-- [ ] No secrets, credentials, or local-only paths committed
-- [ ] I would merge this if I were the owner reviewing visuals + text
+- [ ] No secrets committed

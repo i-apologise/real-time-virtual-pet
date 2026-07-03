@@ -12,15 +12,39 @@ A Tamagotchi-style desktop pet where **real wall-clock time** drives needs, **ne
 
 ## Status
 
-Greenfield. Design approved (rev 5.1). Implementation follows the ordered PR plan in the design doc.
+**PR1 in progress:** Godot **4.3** project shell, main placeholder scene, autoload stubs, zero-dep test runner, concept art under `docs/concept-art/`.
+
+Design: rev **5.2** (town + human WASD + death-first pet) in `docs/design-real-time-virtual-pet.md`.
+
+## Opening the project
+
+1. Install **Godot 4.3.x** (exact patch pinned when known).
+2. Import / open this folder as a project (`project.godot`).
+3. Press **F5** — main bootstrap scene.
+
+```bash
+# Headless tests (from repo root)
+godot --headless --path . -s res://tests/run_tests.gd
+```
+
+If `godot` is not on PATH (macOS cask):
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --headless --path . -s res://tests/run_tests.gd
+```
+
+## Concept art (look targets)
+
+See [`docs/concept-art/`](docs/concept-art/) for town, house care, park, store, and graveyard target visuals.
+
 
 ## Contributing / PRs
 
 1. Branch from `main`.
 2. Open a **PR with a full description** (template enforced).
-3. **Always include screenshots** (UI, debug HUD, terminal test output, or Godot editor as appropriate). CI fails if the Screenshots section is missing or empty.
+3. **Always commit screenshots** under `docs/pr-screenshots/` and list paths in the PR body. Review them in **Files changed** (no public image host).
 4. **CI must be green** before merge.
-5. Owner merges only after reviewing the PR body + screenshots.
+5. Owner merges only after reviewing the PR body + **Files changed** screenshots.
 
 See [Contributing](CONTRIBUTING.md) and [PR standards](docs/PR_STANDARDS.md).
 

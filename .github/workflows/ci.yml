@@ -33,8 +33,15 @@ jobs:
           echo "----- PR body (first 80 lines) -----"
           head -n 80 /tmp/pr_body.md || true
 
-      - name: Validate description + screenshots
+      - name: Validate description + screenshot path list
         run: bash .github/scripts/check_pr_body.sh /tmp/pr_body.md
+
+      - name: Validate screenshot files in PR diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: bash .github/scripts/check_pr_screenshot_files.sh
 
   structure:
     name: Repo structure
@@ -49,7 +56,6 @@ jobs:
   godot-tests:
     name: Godot tests
     runs-on: ubuntu-latest
-    # Skip gracefully until project exists; still a green optional path early.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -61,7 +67,7 @@ jobs:
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "No project.godot yet — Godot tests skipped (will become required once project bootstrapped)."
+            echo "No project.godot yet — Godot tests skipped."
           fi
 
       - name: Setup Godot 4.3
@@ -76,7 +82,6 @@ jobs:
         if: steps.godot.outputs.present == 'true'
         run: |
           godot --headless --path . --import || true
-          # Second pass ensures import settles on some versions
           godot --headless --path . --quit-after 1 || true
 
       - name: Run unit tests

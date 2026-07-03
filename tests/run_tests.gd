@@ -12,6 +12,7 @@ const TEST_SCRIPTS := [
 	"res://tests/test_care_actions.gd",
 	"res://tests/test_save_manager.gd",
 	"res://tests/test_adopt_burial.gd",
+	"res://tests/test_scenes_load.gd",
 ]
 
 

@@ -10,6 +10,7 @@ func run() -> Dictionary:
 		"res://scenes/store/pet_store.tscn",
 		"res://scenes/town/town.tscn",
 		"res://scenes/main.tscn",
+		"res://scenes/ui/tutorial.tscn",
 	]
 	for p in paths:
 		if not ResourceLoader.exists(p):

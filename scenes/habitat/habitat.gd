@@ -131,7 +131,7 @@ func _build_actors() -> void:
 	_human.move_speed = 100.0
 	_human.position = Vector2(120, 220)
 	_world.add_child(_human)
-	_human.setup_frames(SpriteFactoryScr.human_frames(), 3.0)  # same scale as town AI
+	_human.setup_frames(SpriteFactoryScr.human_frames(), 2.0)  # same scale as town AI
 	_human.setup_collision(false)
 
 	_pet = AnimatedActorScr.new()
@@ -188,7 +188,7 @@ func _reload_pet_sprites() -> void:
 	if PetController.active_pet != null:
 		sid = String(PetController.active_pet.species_id)
 	_pet.is_pet = true
-	_pet.setup_frames(SpriteFactoryScr.pet_frames(sid), 3.0)  # same pixel scale as humans
+	_pet.setup_frames(SpriteFactoryScr.pet_frames(sid), 2.0)  # same pixel scale as humans
 	_pet.setup_collision(true)
 	_apply_pet_condition_visual()
 

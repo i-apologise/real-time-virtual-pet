@@ -46,11 +46,11 @@ func setup_collision(as_pet: bool = false) -> void:
 		collision_mask = LAYER_WORLD | LAYER_PET  # cannot walk through world or pet
 
 
-func setup_frames(frames: SpriteFrames, scale_mul: float = 3.0) -> void:
+func setup_frames(frames: SpriteFrames, scale_mul: float = 2.0) -> void:
 	if _sprite == null:
 		_sprite = AnimatedSprite2D.new()
 		_sprite.centered = true
-		_sprite.position = Vector2(0, -8)
+		_sprite.position = Vector2(0, -12)
 		_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		add_child(_sprite)
 	_sprite.sprite_frames = frames

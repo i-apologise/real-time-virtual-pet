@@ -1,5 +1,5 @@
 extends Node
-## Routes between habitat / graveyard / store / town.
+## Routes between tutorial / habitat / graveyard / store / town.
 
 enum Poi { TOWN, HOUSE, PARK, STORE, GRAVEYARD }
 
@@ -9,6 +9,7 @@ const SCENE_PATHS := {
 	"graveyard": "res://scenes/graveyard/graveyard.tscn",
 	"pet_store": "res://scenes/store/pet_store.tscn",
 	"town": "res://scenes/town/town.tscn",
+	"tutorial": "res://scenes/ui/tutorial.tscn",
 }
 
 var current_scene_id: String = "main"
@@ -31,7 +32,6 @@ func describe_poi(poi: Poi) -> String:
 
 
 func bind_host(_host: Node) -> void:
-	# retained for API compatibility; navigation uses change_scene
 	pass
 
 

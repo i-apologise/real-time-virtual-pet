@@ -2,17 +2,21 @@
 
 | Time (UTC-ish) | Event |
 |----------------|--------|
-| 2026-07-03 start | Watchdog + implement agent spawned. PR1+PR2 already merged on main. |
-| | Agent will open **fewer larger PRs**: A sim core → B save+controller → C habitat UI → D world → E polish |
-| | User merges; agent polls and continues. Do not prompt for each PR. |
-| 2026-07-03 | PR2 confirmed MERGED on main. Started **PR A sim core**. |
-| 2026-07-03 | Implemented pure sim; golden tests PASS. Opened **PR #3**. CI green. |
-| 2026-07-03 | **PR #3 (A) MERGED.** Opened **PR #4 (B)** save+controller; CI green. |
-| 2026-07-03 | **PR #4 (B) MERGED.** Opened **PR #5 (C+D)** habitat+store+graveyard+town WASD. |
-| 2026-07-03T10:20Z | Note: GitHub does **not** notify for PRs opened by your own token. Use **NEEDS-YOUR-REVIEW.md**, https://github.com/i-apologise/real-time-virtual-pet/pulls , or Watch → All activity. |
-| 2026-07-03T10:20Z | Added NEEDS-YOUR-REVIEW.md + agent notify protocol (PR #6 docs). |
-| 2026-07-03 | Fixed merge conflict on PR #6 (`docs/agent-progress.md` only). |
-| 2026-07-03 | **PR #5 (C+D) MERGED.** Implementing **PR E** polish/export/validation (debug clock, dig hold, README 0.1.0). |
-| 2026-07-03 | Opened **PR #7 (E)** polish 0.1.0 — CI green. Polling user merge. MVP loop complete pending E merge. |
-| 2026-07-03 | Fixed merge conflict on PR #7 (`docs/agent-progress.md` only). |
+| 2026-07-03 start | Watchdog + implement agent. Fewer larger PRs: A→B→C/D→E. |
+| 2026-07-03 | PR2 already MERGED. Built **PR A** sim core; opened **#3**; CI green; **MERGED**. |
+| 2026-07-03 | Opened **PR #4 (B)** save+controller; CI green; **MERGED**. |
+| 2026-07-03 | Opened **PR #5 (C+D)** habitat/store/graveyard/town WASD; CI green; **MERGED**. |
+| 2026-07-03 | Opened **PR #7 (E)** 0.1.0 polish/debug clock/dig ritual; CI green; **MERGED**. |
+| 2026-07-03 end | **Mission complete.** Main has full MVP loop; headless tests **11/11 PASS**. |
+
+## Merged stack
+
+| PR | Scope | URL |
+|----|--------|-----|
+| #1 | Bootstrap | https://github.com/i-apologise/real-time-virtual-pet/pull/1 |
+| #2 | TimeService/NameUtils | https://github.com/i-apologise/real-time-virtual-pet/pull/2 |
+| #3 | **A** Sim core (death/catch-up/care) | https://github.com/i-apologise/real-time-virtual-pet/pull/3 |
+| #4 | **B** Save v2 + PetController | https://github.com/i-apologise/real-time-virtual-pet/pull/4 |
+| #5 | **C+D** Habitat + world | https://github.com/i-apologise/real-time-virtual-pet/pull/5 |
+| #7 | **E** 0.1.0 polish | https://github.com/i-apologise/real-time-virtual-pet/pull/7 |
 

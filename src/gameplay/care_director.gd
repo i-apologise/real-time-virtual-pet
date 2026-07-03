@@ -1,5 +1,5 @@
 extends Node
-## Care choreography: walk to pet → action-specific anim → apply sim.
+## Care: walk to pet (pet collision off) → play action anims → apply sim.
 
 signal choreography_started(action: StringName)
 signal choreography_finished(action: StringName, result: Dictionary)
@@ -22,8 +22,6 @@ func setup(p_human: CharacterBody2D, p_pet: CharacterBody2D, spots: Dictionary =
 	care_spots = spots
 	if human and not human.arrived.is_connected(_on_human_arrived):
 		human.arrived.connect(_on_human_arrived)
-	if human and not human.anim_finished.is_connected(_on_human_anim_finished):
-		human.anim_finished.connect(_on_human_anim_finished)
 
 
 func is_busy() -> bool:
@@ -38,20 +36,23 @@ func try_start_care(action: StringName) -> Dictionary:
 	if PetController.active_pet == null:
 		return {"ok": false, "reason": &"NO_ACTIVE_PET"}
 	var life: String = str(PetController.active_pet.life_state)
-	if life == "DEAD" and action != &"dig":
+	if life == "DEAD":
 		return {"ok": false, "reason": &"PET_DEAD"}
 
 	_pending_action = action
 	state = State.WALKING
 	human.set_busy(true)
 	pet.set_busy(true)
+	# Allow walking up to pet
+	if pet.has_method("set_collision_enabled"):
+		pet.set_collision_enabled(false)
 	choreography_started.emit(action)
 
-	var target: Vector2 = pet.global_position + Vector2(-28, 8)
+	var target: Vector2 = pet.global_position + Vector2(-24, 10)
 	if care_spots.has(String(action)):
 		target = care_spots[String(action)] as Vector2
 	toast.emit("%s…" % str(action).capitalize())
-	if human.global_position.distance_to(target) <= 14.0:
+	if human.global_position.distance_to(target) <= 16.0:
 		call_deferred("_on_human_arrived")
 	else:
 		human.walk_to(target)
@@ -63,23 +64,17 @@ func _on_human_arrived() -> void:
 		return
 	state = State.ACTING
 	var anim := _action_to_anim(_pending_action)
+	if human.has_method("set_acting"):
+		human.set_acting(true)
 	human.play_anim(anim)
 	_play_pet_reaction(_pending_action)
 	_finish_token += 1
 	var token := _finish_token
-	# ~4 frames at 8fps ≈ 0.5s + hold
-	get_tree().create_timer(1.05).timeout.connect(func():
+	# Hold action pose long enough to see (~1.2s)
+	get_tree().create_timer(1.25).timeout.connect(func():
 		if token == _finish_token:
 			_finish_acting()
 	, CONNECT_ONE_SHOT)
-
-
-func _on_human_anim_finished(anim_name: StringName) -> void:
-	if state != State.ACTING:
-		return
-	var expected := _action_to_anim(_pending_action)
-	if anim_name == expected or String(anim_name) in ["feed", "play", "clean", "sleep", "wake", "dig", "walk_care"]:
-		_finish_acting()
 
 
 func _finish_acting() -> void:
@@ -88,21 +83,17 @@ func _finish_acting() -> void:
 	state = State.IDLE
 	var action := _pending_action
 	_pending_action = &""
-	var result: Dictionary = {}
-	if action == &"dig":
-		result = {"ok": true, "staged_only": true}
-	else:
-		# map walk care to walk action in sim
-		var sim_action := action
-		if action == &"walk_care":
-			sim_action = &"walk"
-		result = PetController.request_care(sim_action if action != &"walk" else &"walk")
+	var result: Dictionary = PetController.request_care(action)
+	if human.has_method("set_acting"):
+		human.set_acting(false)
 	human.set_busy(false)
 	pet.set_busy(false)
+	if pet.has_method("set_collision_enabled"):
+		pet.set_collision_enabled(true)
 	human.play_idle()
 	_sync_pet_mood_anim()
 	if result.get("ok", false):
-		toast.emit("%s done" % str(action).capitalize())
+		toast.emit("%s done!" % str(action).capitalize())
 	else:
 		toast.emit("%s failed: %s" % [str(action), str(result.get("reason", ""))])
 	choreography_finished.emit(action, result)
@@ -112,18 +103,14 @@ func _action_to_anim(action: StringName) -> StringName:
 	match String(action):
 		"feed":
 			return &"feed"
-		"play":
+		"play", "walk":
 			return &"play"
-		"walk":
-			return &"play"  # outdoor-ish play motion; dedicated walk_care available
 		"clean":
 			return &"clean"
 		"sleep":
 			return &"sleep"
 		"wake":
 			return &"wake"
-		"dig":
-			return &"dig"
 		_:
 			return &"feed"
 

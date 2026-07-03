@@ -105,7 +105,7 @@ func _build_world() -> void:
 	_human.setup_collision(false)
 
 	var cam := Camera2D.new()
-	cam.zoom = Vector2(2.0, 2.0)
+	cam.zoom = Vector2(2.5, 2.5)
 	cam.position_smoothing_enabled = true
 	cam.position_smoothing_speed = 7.0
 	_human.add_child(cam)

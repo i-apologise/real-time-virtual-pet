@@ -1,32 +1,34 @@
 extends RefCounted
-## GBA/Pokemon-inspired top-down pixel frames (nearest-neighbor).
+## Pokemon Red/Blue-style 16x16 overworld sprites (nearest-neighbor).
+## Clear silhouettes: trainer, slime, puppy, owl — readable at a glance.
 
 
 static func human_frames() -> SpriteFrames:
 	var sf := SpriteFrames.new()
-	_add_dir_walk_idle(sf)
+	for dir in ["down", "up", "left", "right"]:
+		var idle := "idle_%s" % dir
+		var walk := "walk_%s" % dir
+		sf.add_animation(idle)
+		sf.add_animation(walk)
+		sf.set_animation_speed(idle, 2.0)
+		sf.set_animation_speed(walk, 8.0)
+		sf.set_animation_loop(idle, true)
+		sf.set_animation_loop(walk, true)
+		sf.add_frame(idle, _tex(_trainer(dir, 0)))
+		sf.add_frame(walk, _tex(_trainer(dir, 1)))
+		sf.add_frame(walk, _tex(_trainer(dir, 0)))
+		sf.add_frame(walk, _tex(_trainer(dir, 2)))
+		sf.add_frame(walk, _tex(_trainer(dir, 0)))
 	for action in ["feed", "play", "clean", "sleep", "wake", "dig"]:
 		sf.add_animation(action)
-		sf.set_animation_speed(action, 8.0)
+		sf.set_animation_speed(action, 7.0)
 		sf.set_animation_loop(action, false)
 		for i in 4:
-			sf.add_frame(action, _tex(_draw_human_action(action, i)))
+			sf.add_frame(action, _tex(_trainer_action(action, i)))
 	return sf
 
 
 static func pet_frames(species_id: String) -> SpriteFrames:
-	var body: Color
-	var accent: Color
-	match species_id:
-		"pup":
-			body = Color("E8A45A")
-			accent = Color("C47A3A")
-		"owl":
-			body = Color("7B6BB5")
-			accent = Color("4A3D7A")
-		_:
-			body = Color("5FCFB0")
-			accent = Color("2E8B73")
 	var sf := SpriteFrames.new()
 	for anim in ["idle", "hungry", "weak", "happy", "sad", "sleep", "eat", "play", "dead", "walk"]:
 		sf.add_animation(anim)
@@ -34,7 +36,15 @@ static func pet_frames(species_id: String) -> SpriteFrames:
 		sf.set_animation_loop(anim, anim not in ["dead", "eat"])
 		var n := 1 if anim == "dead" else 4
 		for i in n:
-			sf.add_frame(anim, _tex(_draw_pet(body, accent, anim, i)))
+			var img: Image
+			match species_id:
+				"pup":
+					img = _puppy(anim, i)
+				"owl":
+					img = _owl(anim, i)
+				_:
+					img = _slime(anim, i)
+			sf.add_frame(anim, _tex(img))
 	return sf
 
 
@@ -42,184 +52,428 @@ static func make_tile(kind: String) -> Texture2D:
 	var img := Image.create(16, 16, false, Image.FORMAT_RGBA8)
 	match kind:
 		"grass":
-			img.fill(Color("5DBB4A"))
-			for i in 12:
-				var px := (i * 7) % 16
-				var py := (i * 11) % 16
-				img.set_pixel(px, py, Color("4AA338"))
-				img.set_pixel((px + 1) % 16, py, Color("6ED655"))
-		"path":
-			img.fill(Color("C9B896"))
-			for i in 8:
-				img.set_pixel(i * 2, i, Color("B8A57E"))
-		"floor":
-			img.fill(Color("D4B896"))
-			for x in 16:
-				img.set_pixel(x, 0, Color("C4A882"))
-				img.set_pixel(x, 15, Color("C4A882"))
-		"wall":
-			img.fill(Color("E8DCC8"))
+			# Classic overworld grass: two-tone checker with tufts
 			for y in 16:
-				img.set_pixel(0, y, Color("D0C4B0"))
+				for x in 16:
+					var base := Color("48A838") if ((x / 2) + (y / 2)) % 2 == 0 else Color("3D9030")
+					img.set_pixel(x, y, base)
+			# tufts
+			for t in [[2, 3], [9, 2], [5, 10], [12, 8], [3, 13], [14, 12]]:
+				img.set_pixel(t[0], t[1], Color("5BC448"))
+				img.set_pixel(t[0], t[1] + 1, Color("2E701F"))
+		"path":
+			for y in 16:
+				for x in 16:
+					img.set_pixel(x, y, Color("D8C898") if (x + y) % 3 != 0 else Color("C8B888"))
+			# edge darker
+			for i in 16:
+				img.set_pixel(i, 0, Color("B8A070"))
+				img.set_pixel(i, 15, Color("B8A070"))
+		"floor":
+			for y in 16:
+				for x in 16:
+					img.set_pixel(x, y, Color("E0C8A0") if (x / 4 + y / 4) % 2 == 0 else Color("D4BC94"))
+		"wall":
+			img.fill(Color("F0E0C8"))
+			for x in 16:
+				img.set_pixel(x, 15, Color("C8B090"))
+				img.set_pixel(x, 0, Color("FFF8E8"))
 		_:
 			img.fill(Color.MAGENTA)
 	return ImageTexture.create_from_image(img)
 
 
 static func _tex(img: Image) -> Texture2D:
-	var t := ImageTexture.create_from_image(img)
-	return t
+	return ImageTexture.create_from_image(img)
 
 
-static func _add_dir_walk_idle(sf: SpriteFrames) -> void:
-	for dir in ["down", "up", "left", "right"]:
-		var idle := "idle_%s" % dir
-		var walk := "walk_%s" % dir
-		sf.add_animation(idle)
-		sf.add_animation(walk)
-		sf.set_animation_speed(idle, 3.0)
-		sf.set_animation_speed(walk, 9.0)
-		sf.set_animation_loop(idle, true)
-		sf.set_animation_loop(walk, true)
-		sf.add_frame(idle, _tex(_draw_trainer(dir, 0, false)))
-		for step in 4:
-			sf.add_frame(walk, _tex(_draw_trainer(dir, step, true)))
+# --- colors (SNES/GBC friendly palette) ---
+const C_OUT := Color("101010")
+const C_SKIN := Color("F8D0A0")
+const C_SKIN_S := Color("E0A878")
+const C_HAIR := Color("503018")
+const C_CAP := Color("E03030")
+const C_CAP_D := Color("A01818")
+const C_SHIRT := Color("3068C8")
+const C_SHIRT_S := Color("2048A0")
+const C_PANTS := Color("284060")
+const C_SHOE := Color("202020")
+const C_WHITE := Color("F8F8F8")
 
 
-## Classic top-down trainer silhouette (Pokemon gen-ish proportions).
-static func _draw_trainer(dir: String, step: int, walking: bool) -> Image:
-	var img := Image.create(16, 24, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0, 0, 0, 0))
-	var skin := Color("F1C27D")
-	var hair := Color("3D2914")
-	var shirt := Color("3B6EA5")
-	var pants := Color("2C3E50")
-	var shoes := Color("1A1A1A")
-	var leg := 0
-	if walking:
-		leg = 1 if step % 2 == 0 else -1
-	# shadow
-	_ellipse(img, 8, 22, 5, 2, Color(0, 0, 0, 0.22))
-	# shoes/legs
-	_fill(img, 5, 17 + leg, 3, 5, pants)
-	_fill(img, 9, 17 - leg, 3, 5, pants)
-	_fill(img, 5, 21 + leg, 3, 2, shoes)
-	_fill(img, 9, 21 - leg, 3, 2, shoes)
-	# torso
-	_fill(img, 4, 10, 8, 8, shirt)
-	# head
-	_fill(img, 5, 3, 6, 7, skin)
-	_fill(img, 4, 2, 8, 3, hair)
-	# cap brim
-	_fill(img, 4, 4, 8, 2, Color("C0392B"))
-	# face
-	match dir:
-		"left":
-			_fill(img, 6, 7, 1, 1, Color("1A1A1A"))
-		"right":
-			_fill(img, 9, 7, 1, 1, Color("1A1A1A"))
-		"up":
-			pass
-		_:
-			_fill(img, 6, 7, 1, 1, Color("1A1A1A"))
-			_fill(img, 9, 7, 1, 1, Color("1A1A1A"))
-	# arms
-	var ay := 11 + (leg if walking else 0)
-	_fill(img, 2, ay, 2, 5, skin)
-	_fill(img, 12, 11 - (leg if walking else 0), 2, 5, skin)
-	return img
-
-
-static func _draw_human_action(action: String, frame: int) -> Image:
-	var img := _draw_trainer("down", frame, false)
-	match action:
-		"feed":
-			_fill(img, 11, 14 - frame % 2, 4, 3, Color("F5D76E"))
-		"play":
-			_fill(img, 12, 8 + frame % 3, 3, 3, Color("E74C3C"))
-		"clean":
-			_fill(img, 1, 9 + frame % 2, 3, 5, Color("AED6F1"))
-		"sleep", "wake":
-			_fill(img, 12, 2, 3, 2, Color(1, 1, 1, 0.7 if frame % 2 == 0 else 0.25))
-		"dig":
-			_fill(img, 12, 12 + frame % 2, 2, 7, Color("8B6914"))
-	return img
-
-
-## Creature body changes with condition: thin/pale when hungry, slump when weak.
-static func _draw_pet(body: Color, accent: Color, anim: String, frame: int) -> Image:
+## Pokemon-style 16x16 trainer (Red/Blue overworld readable).
+## step: 0 idle, 1 left foot, 2 right foot
+static func _trainer(dir: String, step: int) -> Image:
 	var img := Image.create(16, 16, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
-	var bob := 0
-	if anim in ["idle", "walk", "happy", "play"]:
-		bob = frame % 2
-	var thin := anim in ["hungry", "weak", "critical"] or anim == "sad"
-	var w := 8 if thin else 10
-	var h := 7 if anim == "weak" else (8 if thin else 9)
-	var ox := 8 - w / 2
-	var oy := 5 + bob + (2 if anim == "weak" else 0)
+	# soft ground shadow (not full block)
+	_p(img, 5, 14, Color(0, 0, 0, 0.25))
+	_p(img, 6, 14, Color(0, 0, 0, 0.3))
+	_p(img, 7, 14, Color(0, 0, 0, 0.3))
+	_p(img, 8, 14, Color(0, 0, 0, 0.3))
+	_p(img, 9, 14, Color(0, 0, 0, 0.3))
+	_p(img, 10, 14, Color(0, 0, 0, 0.25))
 
-	if anim == "dead":
-		_ellipse(img, 8, 11, 7, 4, body.darkened(0.35))
-		_fill(img, 5, 10, 2, 2, Color("1A1A1A"))
-		_fill(img, 10, 10, 2, 2, Color("1A1A1A"))
-		_fill(img, 7, 12, 3, 1, Color("5D4E37"))
+	match dir:
+		"down":
+			_trainer_down(img, step)
+		"up":
+			_trainer_up(img, step)
+		"left":
+			_trainer_left(img, step)
+		"right":
+			_trainer_right(img, step)
+	return img
+
+
+static func _trainer_down(img: Image, step: int) -> void:
+	# cap
+	_rect(img, 4, 1, 8, 2, C_CAP)
+	_rect(img, 3, 2, 10, 1, C_CAP)
+	_rect(img, 5, 0, 6, 1, C_CAP_D)  # top
+	# face
+	_rect(img, 5, 3, 6, 4, C_SKIN)
+	_p(img, 6, 4, C_OUT)  # eyes
+	_p(img, 9, 4, C_OUT)
+	_p(img, 7, 6, C_SKIN_S)  # nose shade
+	# hair sides under cap
+	_p(img, 4, 3, C_HAIR)
+	_p(img, 11, 3, C_HAIR)
+	# torso
+	_rect(img, 4, 7, 8, 4, C_SHIRT)
+	_rect(img, 5, 7, 6, 1, C_SHIRT_S)
+	# arms
+	_rect(img, 2, 8, 2, 3, C_SKIN)
+	_rect(img, 12, 8, 2, 3, C_SKIN)
+	_p(img, 2, 8, C_OUT)
+	_p(img, 13, 8, C_OUT)
+	# legs
+	var lo := 0
+	var ro := 0
+	if step == 1:
+		lo = 1
+	elif step == 2:
+		ro = 1
+	_rect(img, 5, 11, 2, 3 + lo, C_PANTS)
+	_rect(img, 9, 11, 2, 3 + ro, C_PANTS)
+	_rect(img, 5, 13 + lo, 2, 1, C_SHOE)
+	_rect(img, 9, 13 + ro, 2, 1, C_SHOE)
+	# outline key edges
+	_outline_silhouette(img)
+
+
+static func _trainer_up(img: Image, step: int) -> void:
+	_rect(img, 4, 1, 8, 2, C_CAP)
+	_rect(img, 3, 2, 10, 1, C_CAP)
+	_rect(img, 5, 0, 6, 1, C_CAP_D)
+	# back of head hair
+	_rect(img, 5, 3, 6, 3, C_HAIR)
+	_rect(img, 4, 7, 8, 4, C_SHIRT)
+	_rect(img, 2, 8, 2, 3, C_SKIN)
+	_rect(img, 12, 8, 2, 3, C_SKIN)
+	var lo := 1 if step == 1 else 0
+	var ro := 1 if step == 2 else 0
+	_rect(img, 5, 11, 2, 3 + lo, C_PANTS)
+	_rect(img, 9, 11, 2, 3 + ro, C_PANTS)
+	_rect(img, 5, 13 + lo, 2, 1, C_SHOE)
+	_rect(img, 9, 13 + ro, 2, 1, C_SHOE)
+	_outline_silhouette(img)
+
+
+static func _trainer_left(img: Image, step: int) -> void:
+	_rect(img, 4, 1, 7, 2, C_CAP)
+	_rect(img, 3, 2, 8, 1, C_CAP)
+	_rect(img, 5, 0, 5, 1, C_CAP_D)
+	_rect(img, 4, 3, 5, 4, C_SKIN)
+	_p(img, 5, 4, C_OUT)  # eye
+	_p(img, 4, 3, C_HAIR)
+	_rect(img, 5, 7, 5, 4, C_SHIRT)
+	# front arm
+	var arm_y := 8 + (1 if step == 1 else 0)
+	_rect(img, 3, arm_y, 2, 3, C_SKIN)
+	var leg := 1 if step != 0 else 0
+	_rect(img, 6, 11, 2, 3 + leg, C_PANTS)
+	_rect(img, 8, 11, 2, 3 - leg, C_PANTS)
+	_rect(img, 6, 13 + leg, 2, 1, C_SHOE)
+	_rect(img, 8, 13 - leg, 2, 1, C_SHOE)
+	_outline_silhouette(img)
+
+
+static func _trainer_right(img: Image, step: int) -> void:
+	# mirror left by drawing right-facing
+	_rect(img, 5, 1, 7, 2, C_CAP)
+	_rect(img, 5, 2, 8, 1, C_CAP)
+	_rect(img, 6, 0, 5, 1, C_CAP_D)
+	_rect(img, 7, 3, 5, 4, C_SKIN)
+	_p(img, 10, 4, C_OUT)
+	_p(img, 11, 3, C_HAIR)
+	_rect(img, 6, 7, 5, 4, C_SHIRT)
+	var arm_y := 8 + (1 if step == 1 else 0)
+	_rect(img, 11, arm_y, 2, 3, C_SKIN)
+	var leg := 1 if step != 0 else 0
+	_rect(img, 8, 11, 2, 3 + leg, C_PANTS)
+	_rect(img, 6, 11, 2, 3 - leg, C_PANTS)
+	_rect(img, 8, 13 + leg, 2, 1, C_SHOE)
+	_rect(img, 6, 13 - leg, 2, 1, C_SHOE)
+	_outline_silhouette(img)
+
+
+static func _trainer_action(action: String, frame: int) -> Image:
+	var img := _trainer("down", frame % 3)
+	match action:
+		"feed":
+			# bowl in hands
+			_rect(img, 9, 9 - frame % 2, 5, 3, Color("E8D060"))
+			_rect(img, 10, 10 - frame % 2, 3, 1, Color("C8A040"))
+			_p(img, 9, 9 - frame % 2, C_OUT)
+		"play":
+			# pokeball-like toy
+			_rect(img, 11, 6 + frame % 3, 3, 3, Color("E03030"))
+			_p(img, 12, 7 + frame % 3, C_WHITE)
+			_p(img, 11, 6 + frame % 3, C_OUT)
+		"clean":
+			_rect(img, 1, 7 + frame % 2, 3, 5, Color("90D0F0"))
+			_rect(img, 1, 6 + frame % 2, 3, 1, Color("F0F0F0"))
+		"sleep", "wake":
+			_p(img, 12, 2, C_WHITE)
+			_p(img, 13, 1, C_WHITE)
+			if frame % 2 == 0:
+				_p(img, 14, 2, C_WHITE)
+		"dig":
+			_rect(img, 12, 8 + frame % 2, 2, 6, Color("8B6914"))
+			_rect(img, 11, 13 + frame % 2, 4, 2, Color("606060"))
+	return img
+
+
+## Classic RPG green slime — round, shine, face (readable as a creature).
+static func _slime(anim: String, frame: int) -> Image:
+	var img := Image.create(16, 16, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var bob := frame % 2 if anim in ["idle", "walk", "happy", "play"] else 0
+	var body := Color("40C878")
+	var body_d := Color("209050")
+	var body_l := Color("70F0A0")
+	if anim == "hungry":
+		body = Color("88B070")
+		body_d = Color("608050")
+		body_l = Color("A0C890")
+		bob = 0
+	elif anim == "weak":
+		body = Color("A09080")
+		body_d = Color("706050")
+		body_l = Color("C0B0A0")
+		bob = 1
+	elif anim == "dead":
+		# flattened puddle
+		_rect(img, 2, 10, 12, 4, Color("306848"))
+		_rect(img, 3, 11, 10, 2, Color("40C878").darkened(0.4))
+		_p(img, 5, 11, C_OUT)
+		_p(img, 10, 11, C_OUT)
+		_p(img, 7, 12, Color("503020"))
+		_outline_silhouette(img)
 		return img
 
 	# shadow
-	_ellipse(img, 8, 14, 5, 2, Color(0, 0, 0, 0.2))
-	# body
-	var col := body
-	if anim == "hungry":
-		col = body.lerp(Color("C4B59A"), 0.35)
-	elif anim == "weak":
-		col = body.lerp(Color("A08080"), 0.45).darkened(0.1)
-	_ellipse(img, 8, oy + h / 2, w / 2 + 1, h / 2 + 1, col)
-	# belly (smaller when hungry = looks gaunt)
-	if not thin:
-		_ellipse(img, 8, oy + h / 2 + 1, 3, 2, col.lightened(0.15))
-	# ears/cheeks species accent
-	_fill(img, ox, oy + 1, 2, 2, accent)
-	_fill(img, ox + w - 2, oy + 1, 2, 2, accent)
-	# eyes — tired when hungry/weak
+	_rect(img, 4, 13, 8, 2, Color(0, 0, 0, 0.2))
+	# body blob (dome)
+	var y0 := 4 + bob
+	_rect(img, 4, y0 + 2, 8, 7, body)
+	_rect(img, 3, y0 + 3, 10, 5, body)
+	_rect(img, 5, y0 + 1, 6, 1, body)
+	_rect(img, 6, y0, 4, 1, body)
+	# shade bottom
+	_rect(img, 4, y0 + 7, 8, 2, body_d)
+	# highlight (classic slime shine)
+	if anim != "weak":
+		_p(img, 6, y0 + 2, body_l)
+		_p(img, 7, y0 + 2, body_l)
+		_p(img, 6, y0 + 3, body_l)
+	# eyes
 	if anim == "sleep":
-		_fill(img, 5, oy + 3, 2, 1, Color("1A1A1A"))
-		_fill(img, 9, oy + 3, 2, 1, Color("1A1A1A"))
+		_rect(img, 5, y0 + 4, 2, 1, C_OUT)
+		_rect(img, 9, y0 + 4, 2, 1, C_OUT)
 	elif anim == "weak" or anim == "hungry":
-		_fill(img, 5, oy + 3, 2, 1, Color("1A1A1A"))  # half-lid
-		_fill(img, 9, oy + 3, 2, 1, Color("1A1A1A"))
-		# sweat drop when weak
-		if anim == "weak" and frame % 2 == 0:
-			_fill(img, 12, oy, 1, 2, Color("85C1E9"))
+		_rect(img, 5, y0 + 4, 2, 1, C_OUT)  # half closed
+		_rect(img, 9, y0 + 4, 2, 1, C_OUT)
+		if anim == "weak":
+			_p(img, 12, y0 + 2, Color("80C0F0"))  # sweat
 	elif anim == "sad":
-		_fill(img, 5, oy + 4, 2, 2, Color("1A1A1A"))
-		_fill(img, 9, oy + 4, 2, 2, Color("1A1A1A"))
+		_p(img, 5, y0 + 5, C_OUT)
+		_p(img, 6, y0 + 4, C_OUT)
+		_p(img, 9, y0 + 4, C_OUT)
+		_p(img, 10, y0 + 5, C_OUT)
 	else:
-		_fill(img, 5, oy + 3, 2, 2, Color("1A1A1A"))
-		_fill(img, 9, oy + 3, 2, 2, Color("1A1A1A"))
-		if anim == "happy" or anim == "play":
-			_fill(img, 6, oy + 6, 4, 1, Color("5D3A3A"))
-	if anim == "eat":
-		_fill(img, 6, oy + 6 + frame % 2, 4, 2, Color("3D2914"))
-	# ribs lines when starving weak
-	if anim == "weak":
-		_fill(img, 6, oy + 5, 4, 1, col.darkened(0.2))
-		_fill(img, 6, oy + 7, 4, 1, col.darkened(0.2))
+		_rect(img, 5, y0 + 3, 2, 3, C_OUT)
+		_rect(img, 9, y0 + 3, 2, 3, C_OUT)
+		_p(img, 5, y0 + 3, C_WHITE)  # eye shine
+		_p(img, 9, y0 + 3, C_WHITE)
+	# mouth
+	if anim == "happy" or anim == "play":
+		_rect(img, 7, y0 + 7, 2, 1, Color("803020"))
+	elif anim == "eat":
+		_rect(img, 6, y0 + 6 + frame % 2, 4, 2, Color("602010"))
+	elif anim == "weak":
+		# rib-like indent
+		_p(img, 6, y0 + 6, body_d)
+		_p(img, 9, y0 + 6, body_d)
+	_outline_silhouette(img)
 	return img
 
 
-static func _fill(img: Image, x: int, y: int, w: int, h: int, c: Color) -> void:
+## Small dog — ears, snout, tail, legs (readable as a puppy).
+static func _puppy(anim: String, frame: int) -> Image:
+	var img := Image.create(16, 16, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var fur := Color("E8A858")
+	var fur_d := Color("C07830")
+	var fur_l := Color("F8D090")
+	var bob := frame % 2 if anim in ["idle", "walk", "happy", "play"] else 0
+	if anim == "hungry":
+		fur = Color("C8A878")
+		fur_d = Color("A08050")
+	elif anim == "weak":
+		fur = Color("B09080")
+		fur_d = Color("806050")
+		bob = 1
+	elif anim == "dead":
+		_rect(img, 2, 9, 11, 4, fur.darkened(0.35))
+		_rect(img, 12, 10, 3, 2, fur_d)  # tail
+		_p(img, 4, 10, C_OUT)
+		_p(img, 8, 10, C_OUT)
+		_outline_silhouette(img)
+		return img
+
+	_rect(img, 4, 13, 7, 2, Color(0, 0, 0, 0.2))
+	var y := 5 + bob
+	# body
+	_rect(img, 4, y + 3, 8, 5, fur)
+	_rect(img, 5, y + 2, 6, 1, fur)
+	# head
+	_rect(img, 3, y, 7, 5, fur)
+	# ears (pointy)
+	_rect(img, 3, y - 2, 2, 3, fur_d)
+	_rect(img, 8, y - 2, 2, 3, fur_d)
+	_p(img, 3, y - 2, C_OUT)
+	_p(img, 9, y - 2, C_OUT)
+	# snout
+	_rect(img, 4, y + 3, 4, 2, fur_l)
+	_p(img, 5, y + 4, C_OUT)  # nose
+	# eyes
+	if anim == "sleep":
+		_rect(img, 4, y + 2, 2, 1, C_OUT)
+		_rect(img, 7, y + 2, 2, 1, C_OUT)
+	elif anim in ["hungry", "weak"]:
+		_rect(img, 4, y + 2, 2, 1, C_OUT)
+		_rect(img, 7, y + 2, 2, 1, C_OUT)
+	else:
+		_rect(img, 4, y + 1, 2, 2, C_OUT)
+		_rect(img, 7, y + 1, 2, 2, C_OUT)
+		_p(img, 4, y + 1, C_WHITE)
+	# legs
+	var leg := 1 if (anim == "walk" or anim == "play") and frame % 2 == 0 else 0
+	_rect(img, 5, y + 7, 2, 2 + leg, fur_d)
+	_rect(img, 9, y + 7, 2, 2 - leg, fur_d)
+	# tail
+	var ty := y + 3 - (frame % 2 if anim != "weak" else 0)
+	_rect(img, 12, ty, 3, 2, fur)
+	if anim == "happy" or anim == "play":
+		_rect(img, 12, ty - 1, 2, 1, fur)  # wag up
+	if anim == "weak":
+		_p(img, 6, y + 5, fur_d)
+		_p(img, 8, y + 5, fur_d)
+	_outline_silhouette(img)
+	return img
+
+
+## Owl — big head, beak, wing folds (readable bird).
+static func _owl(anim: String, frame: int) -> Image:
+	var img := Image.create(16, 16, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var f := Color("7B6BB8")
+	var f_d := Color("4A3C80")
+	var f_l := Color("A898D8")
+	var belly := Color("E8DCC8")
+	var bob := frame % 2 if anim in ["idle", "happy", "play"] else 0
+	if anim == "hungry":
+		f = Color("8A8098")
+	elif anim == "weak":
+		f = Color("908888")
+		f_d = Color("606060")
+		bob = 1
+	elif anim == "dead":
+		_rect(img, 3, 9, 10, 4, f.darkened(0.4))
+		_p(img, 6, 10, C_OUT)
+		_p(img, 9, 10, C_OUT)
+		_outline_silhouette(img)
+		return img
+
+	_rect(img, 4, 13, 8, 2, Color(0, 0, 0, 0.2))
+	var y := 3 + bob
+	# head (large)
+	_rect(img, 3, y, 10, 8, f)
+	_rect(img, 4, y - 1, 8, 1, f)
+	# ear tufts
+	_rect(img, 3, y - 2, 2, 3, f_d)
+	_rect(img, 11, y - 2, 2, 3, f_d)
+	# face disc
+	_rect(img, 4, y + 2, 8, 5, f_l)
+	# eyes (big — owl signature)
+	if anim == "sleep":
+		_rect(img, 5, y + 4, 2, 1, C_OUT)
+		_rect(img, 9, y + 4, 2, 1, C_OUT)
+	elif anim in ["hungry", "weak"]:
+		_rect(img, 5, y + 3, 2, 2, C_OUT)
+		_rect(img, 9, y + 3, 2, 2, C_OUT)
+	else:
+		_rect(img, 5, y + 3, 2, 3, C_OUT)
+		_rect(img, 9, y + 3, 2, 3, C_OUT)
+		_p(img, 5, y + 3, C_WHITE)
+		_p(img, 9, y + 3, C_WHITE)
+	# beak
+	_rect(img, 7, y + 5, 2, 2, Color("E8A020"))
+	_p(img, 7, y + 5, Color("C08010"))
+	# body/belly
+	_rect(img, 5, y + 8, 6, 3, belly)
+	# wings
+	_rect(img, 2, y + 6, 2, 4, f_d)
+	_rect(img, 12, y + 6, 2, 4, f_d)
+	# feet
+	_rect(img, 6, y + 11, 2, 1, Color("E8A020"))
+	_rect(img, 9, y + 11, 2, 1, Color("E8A020"))
+	if anim == "weak":
+		_p(img, 13, y + 2, Color("80C0F0"))
+	_outline_silhouette(img)
+	return img
+
+
+static func _p(img: Image, x: int, y: int, c: Color) -> void:
+	if x >= 0 and y >= 0 and x < img.get_width() and y < img.get_height():
+		img.set_pixel(x, y, c)
+
+
+static func _rect(img: Image, x: int, y: int, w: int, h: int, c: Color) -> void:
 	for py in range(y, y + h):
 		for px in range(x, x + w):
-			if px >= 0 and py >= 0 and px < img.get_width() and py < img.get_height():
-				img.set_pixel(px, py, c)
+			_p(img, px, py, c)
 
 
-static func _ellipse(img: Image, cx: int, cy: int, rx: int, ry: int, c: Color) -> void:
-	for py in range(cy - ry, cy + ry + 1):
-		for px in range(cx - rx, cx + rx + 1):
-			var dx := float(px - cx) / float(maxi(rx, 1))
-			var dy := float(py - cy) / float(maxi(ry, 1))
-			if dx * dx + dy * dy <= 1.0:
-				if px >= 0 and py >= 0 and px < img.get_width() and py < img.get_height():
-					img.set_pixel(px, py, c)
+## Black outline on non-transparent edge pixels (Pokemon-style crisp edge).
+static func _outline_silhouette(img: Image) -> void:
+	var w := img.get_width()
+	var h := img.get_height()
+	var mark: Array = []
+	for y in h:
+		for x in w:
+			var a := img.get_pixel(x, y).a
+			if a < 0.1:
+				continue
+			for d in [[1, 0], [-1, 0], [0, 1], [0, -1]]:
+				var nx: int = x + d[0]
+				var ny: int = y + d[1]
+				if nx < 0 or ny < 0 or nx >= w or ny >= h or img.get_pixel(nx, ny).a < 0.1:
+					mark.append(Vector2i(x, y))
+					break
+	for v in mark:
+		var px: Color = img.get_pixel(v.x, v.y)
+		# darken edge toward outline instead of full black fill on whole body
+		img.set_pixel(v.x, v.y, px.darkened(0.45).lerp(C_OUT, 0.55))

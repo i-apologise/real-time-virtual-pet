@@ -1,8 +1,6 @@
 # Needs your review
 
-- **Open PR (care rooms / leash / timer)** — branch `feat/care-rooms-leash-timer-sprites`
-  (link filled after `gh pr create`)
+- **PR #16** — care timer, bathroom clean, leash walk, human+pet beds
+  https://github.com/i-apologise/real-time-virtual-pet/pull/16
 
-Clean no longer loops; care timer HUD; bathroom clean; leashed walk; human + pet beds.
-
-Review **Files changed** for screenshots under `docs/pr-screenshots/pr16-*.png`.
+Review **Files changed** for `docs/pr-screenshots/pr16-*.png`.

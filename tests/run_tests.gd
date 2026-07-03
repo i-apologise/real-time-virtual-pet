@@ -10,6 +10,8 @@ const TEST_SCRIPTS := [
 	"res://tests/test_death_rules.gd",
 	"res://tests/test_catchup_matrix.gd",
 	"res://tests/test_care_actions.gd",
+	"res://tests/test_save_manager.gd",
+	"res://tests/test_adopt_burial.gd",
 ]
 
 

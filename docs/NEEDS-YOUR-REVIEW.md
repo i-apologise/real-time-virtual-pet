@@ -1,6 +1,8 @@
 # Needs your review
 
-- **PR #12** — better 32px sprites + tutorial → adopt first
-  https://github.com/i-apologise/real-time-virtual-pet/pull/12
+- **Open PR (care rooms / leash / timer)** — branch `feat/care-rooms-leash-timer-sprites`
+  (link filled after `gh pr create`)
 
-See Files changed for `preview-sprites-v2.png` (trainer, slime, puppy, owl).
+Clean no longer loops; care timer HUD; bathroom clean; leashed walk; human + pet beds.
+
+Review **Files changed** for screenshots under `docs/pr-screenshots/pr16-*.png`.

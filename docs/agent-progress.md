@@ -10,3 +10,4 @@
 | 2026-07-03 | Implemented pure sim: LifeState, SimConfig, SpeciesCatalog (blob/pup/owl), PetModel, DeathRules, NeedsSimulator, CareActions, Mood; golden tests 7/7 PASS. Opening PR. |
 | 2026-07-03 | Opened **PR #3** (PR A sim core): https://github.com/i-apologise/real-time-virtual-pet/pull/3 — polling CI / user merge. |
 | 2026-07-03 | PR #3 CI **all green**. Local **PR B** implemented on `pr-B-save-controller` (not pushed until A merges). Polling merge. |
+| 2026-07-03 | **PR #3 (A) MERGED.** Rebased PR B onto main; tests 9/9 green. Opening PR B. |

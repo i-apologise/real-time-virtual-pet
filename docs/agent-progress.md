@@ -11,3 +11,4 @@
 | 2026-07-03 | **PR #3 (A) MERGED.** Opened **PR #4 (B)** save+controller; CI green. |
 | 2026-07-03 | Building **PR C/D**: habitat UI + store + graveyard + town WASD (combined playable world). |
 
+| 2026-07-03 | **PR #4 (B) MERGED.** Opening PR C habitat+world (store, graveyard, town WASD). |

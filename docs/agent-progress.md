@@ -13,3 +13,4 @@
 | 2026-07-03T10:20Z | Added NEEDS-YOUR-REVIEW.md + agent notify protocol (PR #6 docs). |
 | 2026-07-03 | Fixed merge conflict on PR #6 (`docs/agent-progress.md` only). |
 
+| 2026-07-03 | **PR #5 (C+D) MERGED.** Implementing **PR E** polish/export/validation (debug clock, dig hold, README 0.1.0). |

@@ -3,7 +3,7 @@ extends Control
 
 const MoodStateMachineScr = preload("res://src/sim/mood_state_machine.gd")
 
-var _meters: Dictionary = {}  # stat -> ProgressBar
+var _meters: Dictionary = {}
 var _status: Label
 var _pet_label: Label
 var _pet_shape: ColorRect
@@ -12,6 +12,13 @@ var _empty_panel: PanelContainer
 var _death_panel: PanelContainer
 var _day_night: ColorRect
 var _counter: Label
+var _toast: Label
+var _debug: Label
+var _debug_visible: bool = false
+var _dig_progress: ProgressBar
+var _digging: bool = false
+var _dig_accum: float = 0.0
+const DIG_HOLD_SEC := 3.0
 
 
 func _ready() -> void:
@@ -21,7 +28,55 @@ func _ready() -> void:
 		EventBus.pet_updated.connect(_on_pet_updated)
 	if not EventBus.profile_updated.is_connected(_on_profile):
 		EventBus.profile_updated.connect(_on_profile)
+	if not EventBus.care_performed.is_connected(_on_care):
+		EventBus.care_performed.connect(_on_care)
 	_refresh_from_controller()
+
+
+func _process(delta: float) -> void:
+	if _digging:
+		_dig_accum += delta
+		if _dig_progress:
+			_dig_progress.value = (_dig_accum / DIG_HOLD_SEC) * 100.0
+		if _dig_accum >= DIG_HOLD_SEC:
+			_digging = false
+			_dig_accum = 0.0
+			var r: Dictionary = PetController.complete_burial("")
+			_show_toast("Burial complete" if r.get("ok", false) else str(r.get("reason", "fail")))
+			_refresh_from_controller()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+	var k := event as InputEventKey
+	if k.keycode == KEY_F3:
+		_debug_visible = not _debug_visible
+		if _debug:
+			_debug.visible = _debug_visible
+		_update_debug()
+	elif k.keycode == KEY_F7:
+		_debug_advance(3600.0)  # +1h
+	elif k.keycode == KEY_F8:
+		_debug_advance(3.0 * 86400.0)  # +3d neglect
+	elif k.keycode == KEY_F9:
+		_debug_advance(2.0 * 3600.0)  # +2h
+
+
+func _debug_advance(sec: float) -> void:
+	TimeService.add_debug_offset_sec(sec)
+	PetController.on_focus_resume()
+	_show_toast("Debug clock +%s" % _fmt_dur(sec))
+	_refresh_from_controller()
+	_update_debug()
+
+
+func _fmt_dur(sec: float) -> String:
+	if sec >= 86400.0:
+		return "%.0fd" % (sec / 86400.0)
+	if sec >= 3600.0:
+		return "%.0fh" % (sec / 3600.0)
+	return "%.0fs" % sec
 
 
 func _build_ui() -> void:
@@ -30,7 +85,6 @@ func _build_ui() -> void:
 	root.add_theme_constant_override("separation", 8)
 	add_child(root)
 
-	# Top bar
 	var top := HBoxContainer.new()
 	root.add_child(top)
 	var title := Label.new()
@@ -41,7 +95,6 @@ func _build_ui() -> void:
 	_counter.text = "Deaths: 0 · Graves: 0"
 	top.add_child(_counter)
 
-	# Day/night wash
 	_day_night = ColorRect.new()
 	_day_night.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_day_night.color = Color(0.05, 0.08, 0.2, 0.0)
@@ -54,7 +107,11 @@ func _build_ui() -> void:
 	_status.text = "…"
 	root.add_child(_status)
 
-	# Mid: pet + meters
+	_toast = Label.new()
+	_toast.modulate = Color(1, 1, 0.7)
+	_toast.text = ""
+	root.add_child(_toast)
+
 	var mid := HBoxContainer.new()
 	mid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(mid)
@@ -89,7 +146,6 @@ func _build_ui() -> void:
 		row.add_child(bar)
 		_meters[stat] = bar
 
-	# Actions
 	_action_row = HBoxContainer.new()
 	_action_row.add_theme_constant_override("separation", 6)
 	root.add_child(_action_row)
@@ -107,27 +163,52 @@ func _build_ui() -> void:
 		b.pressed.connect(_on_nav.bind(item[1]))
 		nav.add_child(b)
 
-	# Empty panel
 	_empty_panel = _make_banner_panel("No living pet. Visit the Pet Store to adopt, or the Graveyard to remember.")
 	var adopt_btn := Button.new()
-	adopt_btn.text = "Adopt Cozy Blob (debug)"
+	adopt_btn.text = "Adopt Cozy Blob (quick)"
 	adopt_btn.pressed.connect(func():
 		PetController.debug_adopt_blob("Mochi")
+		_show_toast("Adopted Mochi the Cozy Blob")
 		_refresh_from_controller()
 	)
 	_empty_panel.get_child(0).add_child(adopt_btn)
+	var store_btn := Button.new()
+	store_btn.text = "Visit Pet Store"
+	store_btn.pressed.connect(func(): SceneRouter.go("pet_store"))
+	_empty_panel.get_child(0).add_child(store_btn)
 	root.add_child(_empty_panel)
 
-	# Death panel
-	_death_panel = _make_banner_panel("Your pet has died. Dig a grave to say goodbye.")
+	_death_panel = _make_banner_panel("Your pet has died. Hold Dig Grave (~3s) to bury them.")
+	_dig_progress = ProgressBar.new()
+	_dig_progress.max_value = 100
+	_dig_progress.value = 0
+	_death_panel.get_child(0).add_child(_dig_progress)
 	var dig := Button.new()
-	dig.text = "Dig Grave"
-	dig.pressed.connect(func():
-		PetController.complete_burial("")
-		_refresh_from_controller()
+	dig.text = "Hold to Dig Grave"
+	dig.button_down.connect(func():
+		_digging = true
+		_dig_accum = 0.0
+	)
+	dig.button_up.connect(func():
+		_digging = false
+		_dig_accum = 0.0
+		if _dig_progress:
+			_dig_progress.value = 0
 	)
 	_death_panel.get_child(0).add_child(dig)
 	root.add_child(_death_panel)
+
+	_debug = Label.new()
+	_debug.visible = false
+	_debug.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_debug.add_theme_font_size_override("font_size", 12)
+	_debug.modulate = Color(0.7, 1.0, 0.8)
+	root.add_child(_debug)
+
+	var hints := Label.new()
+	hints.text = "F3 debug · F7 +1h · F9 +2h · F8 +3d (death test) · Town WASD+E"
+	hints.modulate = Color(0.75, 0.75, 0.8)
+	root.add_child(hints)
 
 
 func _make_banner_panel(text: String) -> PanelContainer:
@@ -143,19 +224,25 @@ func _make_banner_panel(text: String) -> PanelContainer:
 
 func _on_action(action: StringName) -> void:
 	var r: Dictionary = PetController.request_care(action)
-	print("[habitat] care ", action, " => ", r.get("reason", "ok"))
+	if r.get("ok", false):
+		var deltas: Variant = r.get("deltas", {})
+		_show_toast("%s %s" % [str(action).capitalize(), str(deltas)])
+	else:
+		_show_toast("%s failed: %s" % [str(action), str(r.get("reason", ""))])
 	_refresh_from_controller()
 
 
+func _on_care(_action: StringName, _result: Dictionary) -> void:
+	pass
+
+
 func _on_nav(scene_id: String) -> void:
-	if SceneRouter.has_method("go"):
-		SceneRouter.go(scene_id)
-	else:
-		print("[habitat] nav ", scene_id)
+	SceneRouter.go(scene_id)
 
 
 func _on_pet_updated(snap: Dictionary) -> void:
 	_apply_snapshot(snap)
+	_update_debug()
 
 
 func _on_profile(snap: Dictionary) -> void:
@@ -165,13 +252,23 @@ func _on_profile(snap: Dictionary) -> void:
 	]
 
 
+func _show_toast(msg: String) -> void:
+	if _toast:
+		_toast.text = msg
+
+
 func _refresh_from_controller() -> void:
 	if PetController.active_pet != null:
 		var mood = MoodStateMachineScr.derive_mood(PetController.active_pet)
-		_apply_snapshot(PetController.active_pet.to_view_dict(mood))
+		var snap: Dictionary = PetController.active_pet.to_view_dict(mood)
+		var st: Dictionary = StatusCopy.status_for_pet(PetController.active_pet)
+		snap["status_message"] = st.get("message", "")
+		snap["local_day_phase"] = TimeService.local_day_phase()
+		_apply_snapshot(snap)
 	else:
 		_apply_snapshot({})
 	_on_profile(PetController.profile.to_view_dict(PetController.active_pet != null))
+	_update_debug()
 
 
 func _apply_snapshot(snap: Dictionary) -> void:
@@ -182,16 +279,18 @@ func _apply_snapshot(snap: Dictionary) -> void:
 	_action_row.visible = has_pet and life != "DEAD"
 	for c in _action_row.get_children():
 		if c is Button:
-			c.disabled = bool(snap.get("is_sleeping", false)) and str(c.text).to_lower() not in ["wake", "sleep"]
-			if str(c.text).to_lower() == "wake":
+			var name_l := str(c.text).to_lower()
+			if name_l == "wake":
 				c.disabled = not bool(snap.get("is_sleeping", false))
-			elif str(c.text).to_lower() == "sleep":
+			elif name_l == "sleep":
 				c.disabled = bool(snap.get("is_sleeping", false)) or life == "DEAD"
+			else:
+				c.disabled = bool(snap.get("is_sleeping", false))
 
 	if not has_pet:
 		_pet_label.text = "Empty bed"
 		_pet_shape.color = Color(0.25, 0.25, 0.3)
-		_status.text = "No pet — adopt to begin."
+		_status.text = "No pet — adopt to begin. Needs decay in real time — even when closed."
 		for k in _meters:
 			_meters[k].value = 0
 		return
@@ -206,8 +305,44 @@ func _apply_snapshot(snap: Dictionary) -> void:
 	for k in _meters:
 		_meters[k].value = float(snap.get(k, 0.0))
 		_meters[k].modulate = _meter_color(float(snap.get(k, 0.0)))
-	_pet_shape.color = _species_color(str(snap.get("species_id", "blob")), life, bool(snap.get("is_sleeping", false)))
+	_pet_shape.color = _species_color(
+		str(snap.get("species_id", "blob")), life, bool(snap.get("is_sleeping", false))
+	)
 	_apply_day_night(str(snap.get("local_day_phase", TimeService.local_day_phase())))
+
+
+func _update_debug() -> void:
+	if _debug == null or not _debug_visible:
+		return
+	var lines: PackedStringArray = []
+	lines.append("DEBUG F3 · offset=%.0fs" % TimeService.debug_offset_sec)
+	lines.append("phase=%s" % TimeService.local_day_phase())
+	if PetController.active_pet != null:
+		var p = PetController.active_pet
+		lines.append(
+			"%s %s H=%.1f E=%.1f A=%.1f Y=%.1f hold=%.0f sleep=%s"
+			% [
+				p.name,
+				str(p.life_state),
+				p.hunger,
+				p.energy,
+				p.happiness,
+				p.hygiene,
+				p.zero_hold_sec,
+				str(p.is_sleeping()),
+			]
+		)
+	else:
+		lines.append("active_pet=null")
+	lines.append(
+		"deaths=%d graves=%d serial=%d"
+		% [
+			PetController.profile.total_pets_died,
+			PetController.profile.total_graves_dug,
+			PetController.profile.next_pet_serial,
+		]
+	)
+	_debug.text = "\n".join(lines)
 
 
 func _meter_color(v: float) -> Color:
@@ -223,14 +358,12 @@ func _meter_color(v: float) -> Color:
 func _species_color(species_id: String, life: String, sleeping: bool) -> Color:
 	if life == "DEAD":
 		return Color(0.35, 0.35, 0.38)
-	var base := Color(0.45, 0.75, 0.95)
+	var base := Color(0.45, 0.8, 0.7)
 	match species_id:
 		"pup":
 			base = Color(0.95, 0.7, 0.4)
 		"owl":
 			base = Color(0.55, 0.45, 0.85)
-		_:
-			base = Color(0.45, 0.8, 0.7)
 	if sleeping:
 		base = base.darkened(0.25)
 	if life == "DYING":

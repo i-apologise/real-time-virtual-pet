@@ -35,6 +35,7 @@ var _pet_stats_root: Node2D
 var _pet_stats_bg: Polygon2D
 var _pet_stats_label: Label
 var _near_pet: bool = false
+var _care_menu_open: bool = false
 
 
 func _ready() -> void:
@@ -268,7 +269,7 @@ func _build_hud() -> void:
 	_hint.position = Vector2(8, 24)
 	_hint.add_theme_font_size_override("font_size", 11)
 	_hint.add_theme_color_override("font_color", Color(0.95, 0.95, 0.85))
-	_hint.text = "WASD move · near pet to see needs · 1-6 care"
+	_hint.text = "WASD move · walk near pet · press E to care"
 	layer.add_child(_hint)
 
 	_toast = Label.new()
@@ -277,19 +278,22 @@ func _build_hud() -> void:
 	_toast.modulate = Color(1, 1, 0.6)
 	layer.add_child(_toast)
 
-	# Action bar only when near pet (and alive)
+	# Care menu: only after pressing E while near pet (not always-on)
 	_action_row = HBoxContainer.new()
-	_action_row.position = Vector2(8, 280)
+	_action_row.position = Vector2(8, 260)
 	_action_row.add_theme_constant_override("separation", 4)
 	_action_row.visible = false
 	layer.add_child(_action_row)
-	var labels := ["1 Feed", "2 Walk", "3 Play", "4 Clean", "5 Sleep", "6 Wake"]
-	var actions := ["feed", "walk", "play", "clean", "sleep", "wake"]
+	var labels := ["1 Feed", "2 Walk", "3 Play", "4 Clean", "5 Sleep", "6 Wake", "Esc Close"]
+	var actions := ["feed", "walk", "play", "clean", "sleep", "wake", "close"]
 	for i in actions.size():
 		var btn := Button.new()
 		btn.text = labels[i]
 		btn.add_theme_font_size_override("font_size", 11)
-		btn.pressed.connect(_on_care.bind(StringName(actions[i])))
+		if actions[i] == "close":
+			btn.pressed.connect(_close_care_menu)
+		else:
+			btn.pressed.connect(_on_care.bind(StringName(actions[i])))
 		_action_row.add_child(btn)
 
 	var nav := HBoxContainer.new()
@@ -375,26 +379,56 @@ func _process(delta: float) -> void:
 			var r: Dictionary = PetController.complete_burial("")
 			_show_toast("Buried." if r.get("ok", false) else str(r.get("reason", "")))
 			_refresh_all()
-	# door exit (left side gap)
-	if _human and _human.position.x < 40.0 and _human.position.y > 200.0:
-		if Input.is_action_just_pressed("interact"):
+	# E: open care when near pet; else town door
+	if Input.is_action_just_pressed("interact"):
+		if _near_pet and PetController.active_pet != null and str(PetController.active_pet.life_state) != "DEAD":
+			if _care_menu_open:
+				_close_care_menu()
+			else:
+				_open_care_menu()
+		elif _human and _human.position.x < 40.0 and _human.position.y > 200.0:
 			SceneRouter.go("town")
+
+
+func _close_care_menu() -> void:
+	_care_menu_open = false
+	if _action_row:
+		_action_row.visible = false
+
+
+func _open_care_menu() -> void:
+	if not _near_pet or PetController.active_pet == null:
+		_show_toast("Get closer to your pet, then press E")
+		return
+	var life := str(PetController.active_pet.life_state)
+	if life == "DEAD":
+		_show_toast("Your pet has passed — use Dig Grave")
+		return
+	_care_menu_open = true
+	_action_row.visible = true
+	_show_toast("Choose a care action")
 
 
 func _update_near_pet_ui() -> void:
 	if _human == null or _pet == null or not _pet.visible:
 		_near_pet = false
 		_pet_stats_root.visible = false
-		_action_row.visible = false
+		if not _care_menu_open and _action_row:
+			_action_row.visible = false
 		return
 	var dist := _human.global_position.distance_to(_pet.global_position)
 	_near_pet = dist <= NEAR_PET_DIST and PetController.active_pet != null
 	var life := ""
 	if PetController.active_pet:
 		life = str(PetController.active_pet.life_state)
+	# Leave care range → close menu
+	if not _near_pet and _care_menu_open:
+		_close_care_menu()
 	_pet_stats_root.visible = _near_pet and life != "DEAD"
-	_action_row.visible = _near_pet and life != "DEAD" and life != ""
-	if _near_pet and PetController.active_pet:
+	# Action bar only when menu opened with E (not merely near)
+	if _action_row and not _care_menu_open:
+		_action_row.visible = false
+	if _near_pet and PetController.active_pet and life != "DEAD":
 		_pet_stats_root.global_position = _pet.global_position
 		var p = PetController.active_pet
 		var cond := _condition_from_pet(p)
@@ -406,18 +440,22 @@ func _update_near_pet_ui() -> void:
 			int(p.hygiene),
 			cond,
 		]
-		if _near_pet:
-			_hint.text = "Near %s — 1-6 to care · body shows how they feel" % p.name
+		_hint.text = "Near %s — press E to care (then 1-6)" % p.name
 	elif PetController.active_pet == null:
 		_hint.text = "Adopt a pet · WASD · E at door for town"
+	elif life == "DEAD":
+		_hint.text = "Your pet has passed — hold Dig Grave"
 	else:
-		_hint.text = "Walk near your pet to see how they feel · WASD"
+		_hint.text = "Walk near your pet · press E to care · WASD"
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
 	var k := event as InputEventKey
+	if k.keycode == KEY_ESCAPE:
+		_close_care_menu()
+		return
 	if k.keycode == KEY_F3:
 		_debug_visible = not _debug_visible
 		_debug.visible = _debug_visible
@@ -428,23 +466,28 @@ func _unhandled_input(event: InputEvent) -> void:
 		_dbg(3.0 * 86400.0)
 	elif k.keycode == KEY_F9:
 		_dbg(2.0 * 3600.0)
-	elif k.keycode == KEY_1:
+	# 1-6 only after E opens care menu near pet
+	elif _care_menu_open and k.keycode == KEY_1:
 		_on_care(&"feed")
-	elif k.keycode == KEY_2:
+	elif _care_menu_open and k.keycode == KEY_2:
 		_on_care(&"walk")
-	elif k.keycode == KEY_3:
+	elif _care_menu_open and k.keycode == KEY_3:
 		_on_care(&"play")
-	elif k.keycode == KEY_4:
+	elif _care_menu_open and k.keycode == KEY_4:
 		_on_care(&"clean")
-	elif k.keycode == KEY_5:
+	elif _care_menu_open and k.keycode == KEY_5:
 		_on_care(&"sleep")
-	elif k.keycode == KEY_6:
+	elif _care_menu_open and k.keycode == KEY_6:
 		_on_care(&"wake")
 
 
 func _on_care(action: StringName) -> void:
+	if not _care_menu_open and action != &"dig":
+		_show_toast("Press E near your pet to care")
+		return
 	if not _near_pet and action != &"dig":
 		_show_toast("Get closer to your pet")
+		_close_care_menu()
 		return
 	if _director and _director.is_busy():
 		_show_toast("…")
@@ -452,6 +495,8 @@ func _on_care(action: StringName) -> void:
 	var r: Dictionary = _director.try_start_care(action)
 	if not r.get("ok", false):
 		_show_toast(str(r.get("reason", "no")))
+	else:
+		_close_care_menu()
 
 
 func _dbg(sec: float) -> void:

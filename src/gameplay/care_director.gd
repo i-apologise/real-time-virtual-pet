@@ -1,6 +1,5 @@
 extends Node
-## Stages care: human walks to target, plays care anim on human+pet, then applies sim.
-## Instantiate via preload("res://src/gameplay/care_director.gd").new()
+## Care choreography: walk to pet → action-specific anim → apply sim.
 
 signal choreography_started(action: StringName)
 signal choreography_finished(action: StringName, result: Dictionary)
@@ -11,10 +10,10 @@ enum State { IDLE, WALKING, ACTING }
 var state: State = State.IDLE
 var human: CharacterBody2D
 var pet: CharacterBody2D
-var care_spots: Dictionary = {}  # action -> Vector2
+var care_spots: Dictionary = {}
 
 var _pending_action: StringName = &""
-var _result: Dictionary = {}
+var _finish_token: int = 0
 
 
 func setup(p_human: CharacterBody2D, p_pet: CharacterBody2D, spots: Dictionary = {}) -> void:
@@ -38,15 +37,9 @@ func try_start_care(action: StringName) -> Dictionary:
 		return {"ok": false, "reason": &"NO_ACTORS"}
 	if PetController.active_pet == null:
 		return {"ok": false, "reason": &"NO_ACTIVE_PET"}
-
-	# Pre-validate without applying (dry call by attempting — CareActions mutates;
-	# so we only gate obvious cases here; actual apply after anim)
 	var life: String = str(PetController.active_pet.life_state)
 	if life == "DEAD" and action != &"dig":
 		return {"ok": false, "reason": &"PET_DEAD"}
-	if action != &"wake" and action != &"dig" and PetController.active_pet.is_sleeping() and action != &"sleep":
-		if action != &"sleep":
-			pass  # CareActions will fail if needed
 
 	_pending_action = action
 	state = State.WALKING
@@ -59,7 +52,6 @@ func try_start_care(action: StringName) -> Dictionary:
 		target = care_spots[String(action)] as Vector2
 	toast.emit("%s…" % str(action).capitalize())
 	if human.global_position.distance_to(target) <= 14.0:
-		# Already close — skip walk path
 		call_deferred("_on_human_arrived")
 	else:
 		human.walk_to(target)
@@ -73,15 +65,20 @@ func _on_human_arrived() -> void:
 	var anim := _action_to_anim(_pending_action)
 	human.play_anim(anim)
 	_play_pet_reaction(_pending_action)
-	# Fallback timer if animation_finished unreliable for short clips
-	get_tree().create_timer(0.85).timeout.connect(_finish_acting, CONNECT_ONE_SHOT)
+	_finish_token += 1
+	var token := _finish_token
+	# ~4 frames at 8fps ≈ 0.5s + hold
+	get_tree().create_timer(1.05).timeout.connect(func():
+		if token == _finish_token:
+			_finish_acting()
+	, CONNECT_ONE_SHOT)
 
 
 func _on_human_anim_finished(anim_name: StringName) -> void:
 	if state != State.ACTING:
 		return
 	var expected := _action_to_anim(_pending_action)
-	if anim_name == expected or String(anim_name) in ["feed", "play", "clean", "sleep", "wake", "dig"]:
+	if anim_name == expected or String(anim_name) in ["feed", "play", "clean", "sleep", "wake", "dig", "walk_care"]:
 		_finish_acting()
 
 
@@ -91,29 +88,34 @@ func _finish_acting() -> void:
 	state = State.IDLE
 	var action := _pending_action
 	_pending_action = &""
-	_result = {}
+	var result: Dictionary = {}
 	if action == &"dig":
-		# Dig is hold ritual in habitat; choreography optional visual only
-		_result = {"ok": true, "staged_only": true}
+		result = {"ok": true, "staged_only": true}
 	else:
-		_result = PetController.request_care(action)
+		# map walk care to walk action in sim
+		var sim_action := action
+		if action == &"walk_care":
+			sim_action = &"walk"
+		result = PetController.request_care(sim_action if action != &"walk" else &"walk")
 	human.set_busy(false)
 	pet.set_busy(false)
 	human.play_idle()
 	_sync_pet_mood_anim()
-	if _result.get("ok", false):
+	if result.get("ok", false):
 		toast.emit("%s done" % str(action).capitalize())
 	else:
-		toast.emit("%s failed: %s" % [str(action), str(_result.get("reason", ""))])
-	choreography_finished.emit(action, _result)
+		toast.emit("%s failed: %s" % [str(action), str(result.get("reason", ""))])
+	choreography_finished.emit(action, result)
 
 
 func _action_to_anim(action: StringName) -> StringName:
 	match String(action):
 		"feed":
 			return &"feed"
-		"play", "walk":
+		"play":
 			return &"play"
+		"walk":
+			return &"play"  # outdoor-ish play motion; dedicated walk_care available
 		"clean":
 			return &"clean"
 		"sleep":
@@ -135,7 +137,7 @@ func _play_pet_reaction(action: StringName) -> void:
 		"play", "walk":
 			pet.play_anim(&"play")
 		"clean":
-			pet.play_anim(&"happy")
+			pet.play_anim(&"clean")
 		"sleep":
 			pet.play_anim(&"sleep")
 		"wake":
@@ -153,8 +155,10 @@ func _sync_pet_mood_anim() -> void:
 		pet.play_anim(&"dead")
 	elif p.is_sleeping():
 		pet.play_anim(&"sleep")
-	elif life == "DYING" or life == "CRITICAL":
-		pet.play_anim(&"sad")
+	elif life == "DYING" or p.hunger <= 0.0:
+		pet.play_anim(&"weak")
+	elif life == "CRITICAL" or p.hunger < 25.0:
+		pet.play_anim(&"hungry")
 	elif p.happiness >= 70.0:
 		pet.play_anim(&"happy")
 	else:

@@ -131,7 +131,7 @@ func _build_actors() -> void:
 	_human.move_speed = 100.0
 	_human.position = Vector2(120, 220)
 	_world.add_child(_human)
-	_human.setup_frames(SpriteFactoryScr.human_frames(), 3.0)
+	_human.setup_frames(SpriteFactoryScr.human_frames(), 3.0)  # same scale as town AI
 	_human.setup_collision(false)
 
 	_pet = AnimatedActorScr.new()
@@ -144,7 +144,7 @@ func _build_actors() -> void:
 	_pet.setup_collision(true)
 
 	_camera = Camera2D.new()
-	_camera.zoom = Vector2(2.2, 2.2)  # chunky pokemon zoom
+	_camera.zoom = Vector2(2.5, 2.5)  # chunky pokemon zoom
 	_camera.position = Vector2(0, -8)
 	_human.add_child(_camera)
 	_camera.make_current()
@@ -188,7 +188,7 @@ func _reload_pet_sprites() -> void:
 	if PetController.active_pet != null:
 		sid = String(PetController.active_pet.species_id)
 	_pet.is_pet = true
-	_pet.setup_frames(SpriteFactoryScr.pet_frames(sid), 3.2)
+	_pet.setup_frames(SpriteFactoryScr.pet_frames(sid), 3.0)  # same pixel scale as humans
 	_pet.setup_collision(true)
 	_apply_pet_condition_visual()
 

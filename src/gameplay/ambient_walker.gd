@@ -17,17 +17,12 @@ func setup(a: Vector2, b: Vector2, speed: float = 55.0) -> void:
 	global_position = a
 	_sprite = AnimatedSprite2D.new()
 	_sprite.centered = true
-	_sprite.position = Vector2(0, -16)
+	_sprite.position = Vector2(0, -8)
 	_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_sprite.scale = Vector2(1.6, 1.6)
+	_sprite.scale = Vector2(3.0, 3.0)
 	_sprite.sprite_frames = SpriteFactoryScr.human_frames()
 	add_child(_sprite)
 	_sprite.play("walk_right")
-	var tag := Label.new()
-	tag.text = "AI"
-	tag.position = Vector2(-10, -40)
-	tag.add_theme_font_size_override("font_size", 10)
-	add_child(tag)
 
 
 func _process(delta: float) -> void:

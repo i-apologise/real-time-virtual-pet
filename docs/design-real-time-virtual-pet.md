@@ -5,8 +5,8 @@
 | **Title** | Real-Time Virtual Pet — Product & System Design (Death-First) |
 | **Author** | TBD |
 | **Date** | 2026-07-03 |
-| **Status** | Approved (rev 5.1 — death-first) |
-| **Revision** | 5.1 (supersedes rev 4 cozy/hibernation-first; review fixes for counters/graveyard/rates) |
+| **Status** | Draft (rev 5.2 — town + human avatar + AI neighbors) |
+| **Revision** | 5.2 (adds player human, care staging in house, small city overworld, AI houses, pet park; keeps death-first pet sim) |
 | **Engine** | Godot **4.3.x** (stable 4.x baseline; known-good editor build pinned in README) |
 | **Language** | GDScript 2.0 (primary) |
 | **Platform (v1)** | Desktop (macOS primary playtest; Windows / Linux export later) |
@@ -14,15 +14,19 @@
 
 **Supersession note:** This document **replaces** the prior cozy default where soft floors + hibernation recovery prevented permanent death. **Death from neglect is core fantasy**, not an optional hardcore flag. Hibernation is **removed** as a long-absence survival path. **No soft floor in MVP** (`ENABLE_SOFT_FLOOR=false`): stats reach **true 0** so the death hold can start. A temporary new-life soft floor (e.g. first 24h) is **stretch only**, not MVP.
 
+**Rev 5.2 product expansion:** The player is a **human character** living in a **small town**. Care actions are **performed on-screen by the human** (and pet) inside the house (and sometimes at the pet park). **Only pets** have needs, cooldowns, death, and burial. **Humans are invincible** — no hunger, no health, no death for any human (player or AI). Neighbor houses run **ambient AI loops** (not full multiplayer). World POIs: **player house**, **AI houses**, **pet park**, **graveyard**, **pet store**.
+
 ---
 
 ## Overview
 
-This document specifies a **Tamagotchi-style virtual pet** built in **Godot 4.3.x** where pet needs advance with **real wall-clock time** (including while the app is closed), and **sustained neglect leads to permanent death**. After death the player performs a **burial ritual** (dig a grave), views a **personal dead-pets counter**, explores a **large graveyard** of prior pets, and adopts a new companion from a **Pet Store** that shows breed care difficulty **before** adoption.
+This document specifies a **Tamagotchi-style life sim** built in **Godot 4.3.x**: you control a **human character** in a **small town**, caring for **one living pet** whose needs advance with **real wall-clock time** (including while the app is closed). **Sustained neglect permanently kills the pet.** After death you **dig a grave** in the town graveyard, track a **personal death counter**, and re-adopt from the **Pet Store** (breed care stats shown before adopt).
 
-The core technical problem remains a **deterministic, offline-capable needs simulation** driven by elapsed real time, with robust persistence, timezone-safe presentation, and soft clock anti-cheat. The simulation core is pure (testable without the scene tree); presentation is scenes, meters, animations, and SFX. On every launch, focus/resume, and periodic open-session tick, a `TimeService` supplies UTC wall time; `PetController` runs a **single ordered catch-up procedure** against `last_sim_unix_utc`, applies capped chunk integration (including sleep auto-wake and **death threshold discovery mid-sim_dt**), and publishes view DTOs. Saves are local JSON with schema versioning.
+**Humans never die and have no vitals.** Care, feed, play, walk, clean, sleep targets are **pets only**. When you trigger a care action, you **see the human perform it** in the house (or at the pet park for outdoor actions) — not only abstract meter deltas.
 
-**MVP vertical slice:** multi-species adoption → real-time care loop → neglect → death (deterministically on catch-up) → dig grave → big graveyard + lifetime counter → re-adopt from store.
+The core technical problem remains a **deterministic, offline-capable pet needs simulation** driven by elapsed real time. The simulation core is pure (testable without the scene tree); presentation is a **town overworld + interior stages + character animations**. On every launch, focus/resume, and periodic open-session tick, a `TimeService` supplies UTC wall time; `PetController` runs catch-up against `last_sim_unix_utc`. Saves are local JSON.
+
+**MVP vertical slice:** walk the small town → adopt at Pet Store → live in **your house** with human+pet care staging → neglect → pet death → burial at **graveyard** → counters → re-adopt. Neighbor houses show **AI humans (and ambient pets)** on automatic loops for life in the city.
 
 ---
 
@@ -91,6 +95,9 @@ The workspace is **empty** of Godot code (docs only). There is no project, save 
 12. **Survival LifeState** including **DEAD** + orthogonal **`is_sleeping`** + **Mood** for presentation.
 13. **Deterministic simulation** core unit-testable without rendering (zero-dep test runner in repo).
 14. Desktop-first Godot 4.3.x project structure ready to grow.
+15. **Player human avatar** (invincible) visible performing care actions in the house / park.
+16. **Small town overworld** with POIs: player house, AI neighbor houses, pet park, graveyard, pet store.
+17. **AI neighbors** on automatic ambient schedules (humans invincible; neighbor pets are ambient/flavor unless promoted later).
 
 ### Non-Goals (v1)
 
@@ -107,6 +114,10 @@ The workspace is **empty** of Godot code (docs only). There is no project, save 
 - Soft floors that permanently prevent stats from reaching 0
 - Resurrection / undo death (death is permanent; adopt a new pet)
 - Procedural epitaph AI / multiplayer grave visits
+- Human vitals / human death / combat / crime systems
+- Full simulation of every AI pet with permanent death (AI pets are **ambient** in MVP)
+- Open-world city the size of a real GTA map — town is a **compact hand-authored district**
+- Online multiplayer neighbors
 
 ---
 
@@ -153,6 +164,13 @@ The workspace is **empty** of Godot code (docs only). There is no project, save 
 | View boundary | **`PetModel.to_view_dict()`** + profile DTO on EventBus | Stable keys for HUD |
 | Notifications (v1) | **`NotificationPort` no-op** behind flag | Avoid overclaim without platform code |
 | MAX_CATCHUP | Still **7 days**; death must be discoverable within integrated window | Long AFK still dies if hold satisfied within integrated sim time; beyond MAX_CATCHUP, integrate only capped window then set `last_sim=now` (see death edge case notes) |
+| Player entity | **Human avatar** in town + interiors; **invincible** (no needs, no HP, no death) | Care fantasy is “you looking after a pet,” not survival for the human |
+| Care presentation | Care actions **stage a short human+pet animation** then apply pet sim deltas | Player *sees* feed/play/etc. happen in the house (or park) |
+| World structure | **Small town map** (top-down or side-ish 2D) with fixed POIs | Store, park, graveyard, houses are places you go — not only menu scenes |
+| AI houses | **Ambient AI humans** (and optional ambient pets) on timers/schedules | City feels alive; no multiplayer; AI humans invincible |
+| What can die | **Player’s active pet only** (authoritative sim). AI ambient pets do not run death economy in MVP | Scope control; death still meaningful for *your* pet |
+| Walk / Play location | Default **house interior**; **Walk** (and optional Play) can **route human+pet to Pet Park** for outdoor staging | Park is a real POI, not only a label |
+| Navigation | **WASD** (and arrow keys) to move the human on town + walkable interiors; click POI still works as fast-travel/focus; action bar for care | Desktop standard; player *walks* the human, not only menu-hops |
 
 ---
 
@@ -163,10 +181,14 @@ The workspace is **empty** of Godot code (docs only). There is no project, save 
 ```mermaid
 flowchart TB
   subgraph Presentation
-    Habitat[Habitat Scene]
+    Town[Town Overworld]
+    PlayerHouse[Player House Interior]
+    AIHouses[AI Neighbor Houses ambient]
+    PetPark[Pet Park]
     Graveyard[Graveyard Big Map]
     PetStore[Pet Store Scene]
     BurialUI[Burial / Dig Grave Overlay]
+    HumanView[Player Human Character + Anims]
     UI[HUD Meters + Action Buttons]
     PetView[Pet Visual + Anims]
     DayNight[DayNight Overlay]
@@ -800,6 +822,151 @@ Exact base rates: **[Appendix A](#appendix-a-global-simconfig--death-constants)*
 - Overlay modulate from `TimeService.local_day_phase()`.
 - **Action-time example:** Walk grants base happiness; if phase is `day` **at click**, add day bonus. **Never** during passive catch-up.
 - Auto-suggest sleep if local night **and** `energy < 40` (banner only), pet alive.
+
+---
+
+
+---
+
+## World, Human Character & Town (rev 5.2)
+
+### Product intent
+
+The game is no longer “meters + a floating pet.” You are a **person in a small city block**. Your job is to **care for your pet**. When you Feed, Play, Clean, etc., you **watch your human do that action** at home (or at the park). Neighbors live their own automatic lives so the town feels inhabited. **Pets can die from neglect. Humans cannot.**
+
+### Entity rules (authoritative)
+
+| Entity | Player-controlled? | Needs / vitals | Can die? | Notes |
+|--------|--------------------|----------------|----------|--------|
+| **Player human** | Yes (navigate + trigger care) | **None** | **No — invincible** | No hunger, HP, energy, aging death |
+| **Player’s active pet** | Indirectly (via care actions) | hunger, energy, happiness, hygiene | **Yes** | Sole authoritative death sim |
+| **AI humans** (neighbors) | No | **None** | **No — invincible** | Ambient schedules only |
+| **AI ambient pets** | No | Optional fake meters for show only | **No (MVP)** | Visual loops; not in `player_profile` death economy |
+| **Store clerk (optional NPC)** | No | None | No | Flavor at Pet Store |
+
+**Invariant:** Any code path that applies decay, cooldowns, `zero_hold_sec`, or `commit_death` targets **`active_pet` only**. Human nodes never call `NeedsSimulator`.
+
+### Small town layout (MVP hand-authored)
+
+Compact single district (not an open-world metropolis). Suggested fixed POIs on a top-down (or 3/4) 2D map:
+
+```text
+                 [ Pet Park ]
+                     |
+[ AI House A ] -- [ Plaza ] -- [ Pet Store ]
+                     |
+              [ Player House ]
+                     |
+            [ AI House B ] -- [ Graveyard ]
+```
+
+| POI | Player can | Presentation |
+|-----|------------|--------------|
+| **Player house** | Enter; full care UI; human+pet care staging; sleep | Primary interior scene |
+| **AI houses** | Optional knock/peek or exterior-only in MVP | Windows/doors show AI loops; enter = stretch |
+| **Pet park** | Enter with pet for **Walk** (and optional **Play**) outdoor staging | Open area, simple props, other AI walkers |
+| **Pet store** | Enter; browse breeds; adopt | Interior or counter UI + town entrance |
+| **Graveyard** | Enter; dig grave; pan/zoom headstones; counters | Large memorial map (existing design) |
+
+**Travel (MVP):**
+
+1. **Primary: WASD / arrow keys** move the **player human** on the town map and in walkable interiors (house, park, store floor, graveyard paths).
+2. **Secondary: click POI** (or click ground) as optional pathing / fast focus on a building entrance.
+3. **Enter / interact** on door or `E` / click when in range to enter POI interiors (or automatic enter on door tile).
+
+Implementation preference: **one continuous (or large) town hub with collision** so WASD feels real; heavy interiors may still be separate scenes entered via doors. Camera **follows the human** (soft follow, clamp to map bounds).
+
+### Player human controls
+
+| Input | Context | Effect |
+|-------|---------|--------|
+| **W A S D** | Town, house, park, store floor, graveyard paths | Move human (8-dir or 4-dir; MVP **4-dir grid-friendly or free 8-dir top-down** — pick free top-down 8-dir with normalized diagonal) |
+| **Arrow keys** | Same as WASD | Same movement (accessibility / preference) |
+| **Shift** (optional) | Town / park | Mild sprint; **no stamina cost** (human invincible, no energy meter) |
+| **E** or **Enter** / click door | In interact range of POI | Enter building / start interact prompt |
+| Click POI icon / ground | Town | Optional path-to or camera focus; **does not replace WASD** |
+| Action bar: Feed, Play, Clean, Sleep/Wake | **Inside player house** (pet alive, rules as care table) | Play **care choreography** then apply pet sim (movement locked mid-anim) |
+| Action bar: Walk | House or town | If not at park: path or prompt to go to **Pet Park**; then outdoor walk choreography + walk deltas |
+| Hold **LMB** / hold **Space** on dig prompt | Graveyard + pet DEAD unburied | Burial ritual (human digs) |
+| Click headstone | Graveyard | Inspect grave (can also WASD next to it + **E**) |
+| Store UI (mouse + typing) | Pet Store counter UI | Select breed, type name 2–16, adopt |
+| **Esc** | Interiors / modals | Close modal or return toward town (confirm if needed) |
+| **1–6** (optional MVP-nice) | House, care unlocked | Hotkeys for Feed / Walk / Play / Clean / Sleep-Wake / (reserved) |
+
+**Movement rules:**
+
+- Human collision against buildings, fences, water; no fall damage / no death.
+- While **care choreography** or **burial dig** plays: **WASD disabled** until finished.
+- Pet follows loosely in town/park when living (simple follow offset); not a second controllable character.
+- AI humans use their own simple move loops; they do not block the player permanently (soft collision or thin colliders).
+
+**Input map (Godot):** actions `move_up`/`move_down`/`move_left`/`move_right` bound to WASD **and** arrows; `interact` → `E`; `sprint` → `Shift` (optional).
+
+### Care choreography (human does the action)
+
+Sim resolution stays **instant** under the hood (cooldowns, deltas unchanged). Presentation **always** plays a short staged sequence (~1–2.5s) before/as meters update:
+
+| Action | Default stage location | Human animation (placeholder OK) | Pet reaction |
+|--------|------------------------|----------------------------------|--------------|
+| **Feed** | House kitchen / bowl | Human walks to bowl, pours food | Pet eats |
+| **Play** | House living room **or** park | Human plays with toy / throws ball | Pet plays |
+| **Clean** | House bath/mat | Human bathes/brushes pet | Pet shake-off |
+| **Sleep** | House bed/cushion | Human tucks pet in / turns light down | Pet sleeps (Zzz) |
+| **Wake** | House | Human calls / opens curtains | Pet wakes |
+| **Walk** | **Pet park** path | Human walks pet on path | Pet trots |
+| **Dig grave** | Graveyard plot | Human digs with shovel | Pet body → headstone |
+
+While a choreography is playing: action bar **locks** until done (no double-apply). Cancel not required in MVP.
+
+```mermaid
+sequenceDiagram
+  participant Player
+  participant UI as ActionBar
+  participant Stage as CareDirector
+  participant Human as HumanView
+  participant Pet as PetView
+  participant Ctrl as PetController
+  participant Sim as CareActions
+
+  Player->>UI: click Feed
+  UI->>Ctrl: request_care(FEED)
+  Ctrl->>Ctrl: validate (alive, not sleeping, cooldown)
+  Ctrl->>Stage: play(FEED)
+  Stage->>Human: anim feed
+  Stage->>Pet: anim eat
+  Stage-->>Ctrl: choreography_done
+  Ctrl->>Sim: apply FEED deltas
+  Ctrl->>Ctrl: publish + save
+```
+
+`CareDirector` is presentation-only; **validation and deltas remain in pure/controller layers** so headless tests still work without animations (tests call apply directly; optional flag `skip_choreography` for debug).
+
+### AI neighbors (ambient life)
+
+- **Count MVP:** 2–4 exterior AI houses + 0–3 park walkers.
+- **Human AI:** simple state machine on real or scaled display time: idle at window → exit → walk loop on sidewalk → return. **Never** affected by player care; **never** die.
+- **Ambient pets:** optional leashed sprites that follow AI humans or sit in yards. **No** `commit_death`, **no** contribution to `total_pets_died`.
+- **Offline:** AI does not need full catch-up; on load, pick a schedule phase from `now` local time so town looks correct immediately.
+- **Stretch:** AI pets with simplified needs (non-fatal); visit AI homes; gifts.
+
+### What stays the same (pet sim)
+
+Death model, catch-up, cooldowns, counters, species catalog, JSON save of `active_pet` + `player_profile` — **unchanged authority**. Town/human are **presentation + navigation** layers on top.
+
+### Save additions (rev 5.2)
+
+Optional lightweight fields (defaults fine if missing):
+
+```json
+"player_human": {
+  "display_name": "",
+  "last_town_poi": "player_house",
+  "pos_x": 0.0,
+  "pos_y": 0.0
+}
+```
+
+No human vitals. AI state need not be persisted in MVP (reseed from clock).
 
 ---
 
@@ -1962,9 +2129,14 @@ Incremental milestones for **greenfield** empty Godot workspace; each leaves `ma
 | **Burial overlay ritual** | PR 11 |
 | **Big graveyard map + counters HUD** | PR 12 |
 | **Pet Store + 3 species cards + adopt** | PR 13 |
-| First-run route polish + SFX/juice | PR 14 |
-| Balance pass (death pacing, species labels) | PR 15 |
-| Export + 0.1.0 validation bar | PR 16 |
+| First-run route polish + SFX/juice | PR 20 |
+| Balance pass (death pacing, species labels) | PR 21 |
+| Export + 0.1.0 validation bar | PR 22 |
+| Town overworld + POIs | PR 16 |
+| Human care choreography in house | PR 17 |
+| Pet park outdoor walk | PR 18 |
+| AI neighbor ambient houses | PR 19 |
+| Player human invincible (no vitals) | PR 17 (assert in code review) |
 
 ### PR 1: Project bootstrap & test runner
 
@@ -2057,27 +2229,73 @@ Incremental milestones for **greenfield** empty Godot workspace; each leaves `ma
 - **Dependencies:** PR 6, PR 8 (name modal reuse)
 - **Description:** 3 cards with feed/play/hardiness/risk/starter stats; adopt → name → habitat; first-run entry; **explicit store PR.**
 
-### PR 14: First-run polish, SFX, juice
+### PR 14: Human character placeholder (invincible) + move component
 
-- **Title:** `feat: first-run flow polish and MVP SFX/juice`
-- **Files:** audio assets, tween polish, copy tone, router edges
-- **Dependencies:** PR 8–13
-- **Description:** Cohesive loop from store → life → death → burial → yard → store.
+- **Title:** `feat: player human avatar with WASD move component (no vitals)`
+- **Files:** `human_view.tscn`, `player_human_controller.gd`, placeholder art, idle/walk anims, input map
+- **Dependencies:** PR 7
+- **Description:** Human visible; **WASD + arrows** movement component (reuse on town/house/park); **no needs/HP**; invincible body for later choreography.
 
-### PR 15: Balance & death pacing pass
+### PR 15: Hook care bar to choreography pipeline (stub)
+
+- **Title:** `feat: CareDirector stub — lock UI, play placeholder human+pet anim, then apply care`
+- **Files:** `care_director.gd`, integration with action bar
+- **Dependencies:** PR 4, PR 8, PR 9, PR 14
+- **Description:** Every care click runs stage-then-apply; headless tests still call apply directly.
+
+### PR 16: Town overworld hub
+
+- **Title:** `feat: small town map with WASD human movement and POIs`
+- **Files:** `town.tscn`, `town.gd`, `poi_marker.tscn`, player human controller, camera follow, input map (WASD+arrows)
+- **Dependencies:** PR 6 (router), PR 14
+- **Description:** **WASD/arrows** move human on town; camera follow; click POI optional; doors interact with `E`; day/night on town.
+
+### PR 17: Player house interior + full human care choreography
+
+- **Title:** `feat: house interior with full human+pet care staging`
+- **Files:** `player_house.tscn`, feed/play/clean/sleep human anims, bowl/bed props
+- **Dependencies:** PR 15, PR 16
+- **Description:** Feed/Play/Clean/Sleep/Wake staged in house with human performing actions; **WASD** walk in house between anims; movement locked during choreography.
+
+### PR 18: Pet park outdoor walk/play staging
+
+- **Title:** `feat: pet park POI and outdoor walk choreography`
+- **Files:** `pet_park.tscn`, walk route anim, AI park walkers ambient
+- **Dependencies:** PR 16, PR 17
+- **Description:** Walk action routes to park when needed; ambient AI humans/pets (**non-dying**).
+
+### PR 19: AI neighbor houses ambient
+
+- **Title:** `feat: AI houses with invincible ambient human schedules`
+- **Files:** `ai_house_exterior.tscn`, `ambient_npc.gd`, schedule table
+- **Dependencies:** PR 16
+- **Description:** 2–4 neighbor facades + sidewalk loops; humans invincible; no pet death economy for AI.
+
+### PR 20: First-run polish, SFX, juice (town loop)
+
+- **Title:** `feat: first-run and full town loop polish + SFX`
+- **Files:** audio, tween, copy, router edges
+- **Dependencies:** PR 11–19
+- **Description:** Store → house care (human visible) → park → death → graveyard dig → re-adopt.
+
+### PR 21: Balance & death pacing pass
 
 - **Title:** `feat: balance tuning for species difficulty and death pacing`
 - **Files:** `sim_config.gd`, `species_catalog.gd`, banner copy, debug overlay
-- **Dependencies:** PR 14
+- **Dependencies:** PR 20
 - **Description:** Playtest 2h alive / 3d dead; store labels match felt difficulty.
 
-### PR 16: Export & 0.1.0 validation sign-off
+### PR 22: Export & 0.1.0 validation sign-off
 
 - **Title:** `chore: desktop export presets and 0.1.0 playtest checklist`
 - **Files:** export presets, README validation bar section
-- **Dependencies:** PR 15
-- **Description:** Run full validation bar; version `0.1.0`.
+- **Dependencies:** PR 21
+- **Description:** Validation includes human choreography smoke + town navigation + death/burial/store.
 
 ---
 
-*End of design document (rev 5.1 — death, burial, graveyard, pet store; review fixes). Supersedes rev 4 cozy/hibernation-first design.*
+### PR plan note (rev 5.2)
+
+**22 PRs total.** Core pet death/save/store/graveyard: **1–13**. Human invincible + care staging: **14–15, 17**. Town / park / AI life: **16, 18, 19**. Polish / balance / ship: **20–22**.
+
+*End of design document (rev 5.2 — town, human avatar, AI neighbors, death-first pet). Supersedes rev 5.1 presentation-only habitat model and rev 4 cozy design.*

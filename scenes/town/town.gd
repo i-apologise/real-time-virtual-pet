@@ -85,7 +85,7 @@ func _build_world() -> void:
 	_solid(Rect2(200, 160, 64, 52), Color("C48C5C"), "House", "habitat")
 	_solid(Rect2(360, 100, 72, 56), Color("5B8DEE"), "Store", "pet_store")
 	_solid(Rect2(80, 100, 80, 48), Color("3DAA55"), "Park", "habitat")
-	_solid(Rect2(480, 180, 72, 52), Color("6B6B70"), "Graveyard", "graveyard")
+	_solid(Rect2(480, 180, 72, 52), Color("6B6B70"), "Backyard", "graveyard")
 	_solid(Rect2(40, 240, 56, 48), Color("8E6E7A"), "AI A", "")
 	_solid(Rect2(540, 90, 56, 48), Color("8E6E7A"), "AI B", "")
 

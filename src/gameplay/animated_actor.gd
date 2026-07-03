@@ -1,5 +1,5 @@
 extends CharacterBody2D
-## Pixel actor: collision, Y-sort, walk/care anims. Pets can show condition visuals.
+## Pixel actor: collision, walk-to, care anims. Acting state keeps anim from being overwritten.
 
 signal arrived
 signal anim_finished(anim_name: StringName)
@@ -15,16 +15,11 @@ const LAYER_PET := 4
 var _sprite: AnimatedSprite2D
 var _facing: String = "down"
 var _busy: bool = false
+var _acting: bool = false  # playing a one-shot care anim
 var _walk_target: Variant = null
-var _arrive_threshold: float = 10.0
+var _arrive_threshold: float = 12.0
 var _collision: CollisionShape2D
-var _condition: String = "healthy"  # healthy | hungry | weak | critical | dead
-
-
-func _ready() -> void:
-	# Feet at origin for correct Y-sort (Pokemon-style)
-	y_sort_enabled = false
-	z_as_relative = true
+var _condition: String = "healthy"
 
 
 func setup_collision(as_pet: bool = false) -> void:
@@ -38,12 +33,22 @@ func setup_collision(as_pet: bool = false) -> void:
 		add_child(_collision)
 	if as_pet:
 		collision_layer = LAYER_PET
-		collision_mask = 0  # pet doesn't push through walls itself (static-ish)
-		# Still CharacterBody so we can move slightly; frozen mask
+		collision_mask = 0
 		motion_mode = MOTION_MODE_FLOATING
 	else:
 		collision_layer = LAYER_PLAYER
-		collision_mask = LAYER_WORLD | LAYER_PET  # cannot walk through world or pet
+		collision_mask = LAYER_WORLD | LAYER_PET
+
+
+func set_collision_enabled(enabled: bool) -> void:
+	if _collision:
+		_collision.disabled = not enabled
+	if not enabled:
+		collision_layer = 0
+	elif is_pet:
+		collision_layer = LAYER_PET
+	else:
+		collision_layer = LAYER_PLAYER
 
 
 func setup_frames(frames: SpriteFrames, scale_mul: float = 2.0) -> void:
@@ -67,12 +72,11 @@ func set_condition(condition: String) -> void:
 		return
 	match condition:
 		"dead":
-			_sprite.modulate = Color(0.55, 0.55, 0.6)
-			_sprite.scale = _sprite.scale  # keep
-		"critical", "dying":
-			_sprite.modulate = Color(0.85, 0.55, 0.55)
-		"weak", "hungry":
-			_sprite.modulate = Color(0.95, 0.85, 0.7)
+			_sprite.modulate = Color(0.7, 0.7, 0.75)
+		"critical", "dying", "weak":
+			_sprite.modulate = Color(0.9, 0.65, 0.65)
+		"hungry":
+			_sprite.modulate = Color(0.95, 0.88, 0.75)
 		_:
 			_sprite.modulate = Color.WHITE
 
@@ -81,6 +85,12 @@ func set_busy(v: bool) -> void:
 	_busy = v
 	if v:
 		_walk_target = null
+	if not v:
+		_acting = false
+
+
+func set_acting(v: bool) -> void:
+	_acting = v
 
 
 func is_busy() -> bool:
@@ -88,14 +98,12 @@ func is_busy() -> bool:
 
 
 func play_idle() -> void:
-	if _sprite == null:
+	if _sprite == null or _acting:
 		return
 	if is_pet:
 		var anim := _pet_idle_anim()
 		if _sprite.sprite_frames.has_animation(anim):
 			_sprite.play(anim)
-		elif _sprite.sprite_frames.has_animation("idle"):
-			_sprite.play("idle")
 		return
 	var anim2 := "idle_%s" % _facing
 	if _sprite.sprite_frames.has_animation(anim2):
@@ -106,21 +114,27 @@ func _pet_idle_anim() -> StringName:
 	match _condition:
 		"dead":
 			return &"dead"
-		"critical", "dying":
+		"critical", "dying", "weak":
 			return &"weak"
-		"hungry", "weak":
+		"hungry":
 			return &"hungry"
 		_:
 			return &"idle"
 
 
 func play_anim(anim: StringName) -> void:
-	if _sprite and _sprite.sprite_frames.has_animation(anim):
-		_sprite.play(anim)
+	if _sprite == null:
+		return
+	if not _sprite.sprite_frames.has_animation(anim):
+		push_warning("Missing anim: %s" % anim)
+		return
+	_acting = true
+	_sprite.play(anim)
 
 
 func walk_to(world_pos: Vector2) -> void:
 	_walk_target = world_pos
+	_acting = false
 
 
 func _on_anim_finished() -> void:
@@ -129,16 +143,20 @@ func _on_anim_finished() -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	# Y-sort: draw order by feet Y
 	z_index = int(global_position.y)
 
 	if is_pet and not is_player_controlled:
-		# Pet stays put; still update z
 		velocity = Vector2.ZERO
 		move_and_slide()
 		return
 
-	if _busy and _walk_target == null:
+	# Pure acting pose (no walk): hold still, do not overwrite anim
+	if _acting and _walk_target == null:
+		velocity = Vector2.ZERO
+		move_and_slide()
+		return
+
+	if _busy and _walk_target == null and not _acting:
 		velocity = Vector2.ZERO
 		move_and_slide()
 		return
@@ -149,11 +167,11 @@ func _physics_process(_delta: float) -> void:
 		if to.length() <= _arrive_threshold:
 			_walk_target = null
 			velocity = Vector2.ZERO
-			play_idle()
+			# Do NOT play_idle here — care director will start action anim
 			arrived.emit()
 		else:
 			dir = to.normalized()
-	elif is_player_controlled and not _busy:
+	elif is_player_controlled and not _busy and not _acting:
 		if Input.is_action_pressed("move_up"):
 			dir.y -= 1
 		if Input.is_action_pressed("move_down"):
@@ -168,20 +186,16 @@ func _physics_process(_delta: float) -> void:
 	velocity = dir * move_speed
 	move_and_slide()
 
-	if dir != Vector2.ZERO:
+	if dir != Vector2.ZERO and not _acting:
 		_update_facing(dir)
 		var walk := "walk_%s" % _facing
 		if _sprite and _sprite.sprite_frames.has_animation(walk):
 			if _sprite.animation != walk:
 				_sprite.play(walk)
-	elif not _busy:
-		if _sprite and _walk_target == null:
+	elif not _busy and not _acting and _walk_target == null:
+		if _sprite:
 			var an := String(_sprite.animation)
-			if an.begins_with("walk") or an == "walk":
-				play_idle()
-			elif _sprite.sprite_frames.has_animation(_sprite.animation) and not _sprite.sprite_frames.get_animation_loop(_sprite.animation):
-				pass
-			elif not an.begins_with("idle") and an not in ["feed", "play", "clean", "sleep", "wake", "dig", "eat", "hungry", "weak", "dead", "happy", "sad"]:
+			if an.begins_with("walk"):
 				play_idle()
 
 

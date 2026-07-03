@@ -347,31 +347,15 @@ func _build_hud() -> void:
 	layer.add_child(_empty_panel)
 	_empty_panel.position = Vector2(150, 100)
 
-	_death_panel = _panel("Pet has died. Hold Dig Grave.")
-	_dig_progress = ProgressBar.new()
-	_dig_progress.custom_minimum_size = Vector2(160, 12)
-	_dig_progress.max_value = 100
-	_death_panel.get_child(0).add_child(_dig_progress)
-	var dig := Button.new()
-	dig.text = "Hold Dig Grave"
-	dig.button_down.connect(func():
-		_digging = true
-		_dig_accum = 0.0
-		if _human:
-			_human.set_busy(true)
-			_human.play_anim(&"dig")
-	)
-	dig.button_up.connect(func():
-		_digging = false
-		_dig_accum = 0.0
-		_dig_progress.value = 0
-		if _human:
-			_human.set_busy(false)
-			_human.play_idle()
-	)
-	_death_panel.get_child(0).add_child(dig)
+	_death_panel = _panel("Your pet has died. Carry them to the backyard graveyard to dig a grave.")
+	var go_yard := Button.new()
+	go_yard.text = "Go to Graveyard"
+	go_yard.pressed.connect(func(): SceneRouter.go("graveyard"))
+	_death_panel.get_child(0).add_child(go_yard)
 	layer.add_child(_death_panel)
 	_death_panel.position = Vector2(150, 100)
+	# Dig no longer happens in the house
+	_dig_progress = null
 
 	_debug = Label.new()
 	_debug.visible = false
@@ -416,18 +400,7 @@ func _refresh_care_cursor() -> void:
 func _process(delta: float) -> void:
 	_update_near_pet_ui()
 	_place_stats_panel()
-	if _digging:
-		_dig_accum += delta
-		_dig_progress.value = (_dig_accum / DIG_HOLD_SEC) * 100.0
-		if _dig_accum >= DIG_HOLD_SEC:
-			_digging = false
-			_dig_accum = 0.0
-			if _human:
-				_human.set_busy(false)
-				_human.play_idle()
-			var r: Dictionary = PetController.complete_burial("")
-			_show_toast("Buried." if r.get("ok", false) else str(r.get("reason", "")))
-			_refresh_all()
+	# burial dig is only in graveyard scene
 	# E: care menu near pet; else town door
 	if Input.is_action_just_pressed("interact"):
 		if _care_menu_open:
@@ -453,7 +426,7 @@ func _open_care_menu() -> void:
 		return
 	var life := str(PetController.active_pet.life_state)
 	if life == "DEAD":
-		_show_toast("Your pet has passed — use Dig Grave")
+		_show_toast("Take them to the backyard Graveyard to dig")
 		return
 	_care_menu_open = true
 	_care_cursor = 0
@@ -515,7 +488,7 @@ func _update_near_pet_ui() -> void:
 	elif PetController.active_pet == null:
 		_hint.text = "Adopt a pet · WASD · E at door for town"
 	elif life == "DEAD":
-		_hint.text = "Your pet has passed — hold Dig Grave"
+		_hint.text = "Your pet has passed — go to the Graveyard (Yard) to dig"
 	else:
 		_hint.text = "Walk near pet · E for CARE menu · WASD"
 

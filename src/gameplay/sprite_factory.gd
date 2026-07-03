@@ -74,6 +74,15 @@ static func pet_frames(species_id: String) -> SpriteFrames:
 			file_anim = "hungry"
 		else:
 			file_anim = "idle"
+		if anim == "walk":
+			# Bounce walk: alternate idle frames at higher speed
+			sf.set_animation_speed(anim, 10.0)
+			sf.set_animation_loop(anim, true)
+			sf.add_frame(anim, _load("%s_idle_0.png" % prefix))
+			sf.add_frame(anim, _load("%s_happy_0.png" % prefix))
+			sf.add_frame(anim, _load("%s_idle_1.png" % prefix))
+			sf.add_frame(anim, _load("%s_happy_1.png" % prefix))
+			continue
 		for i in 2:
 			sf.add_frame(anim, _load("%s_%s_%d.png" % [prefix, file_anim, i]))
 	return sf
@@ -85,18 +94,52 @@ static func make_tile(kind: String) -> Texture2D:
 		"grass":
 			for y in 16:
 				for x in 16:
-					var base := Color("48A838") if ((x / 2) + (y / 2)) % 2 == 0 else Color("3D9030")
+					var n := (x * 3 + y * 7) % 5
+					var base := Color("4CB03C") if ((x / 2) + (y / 2)) % 2 == 0 else Color("3D9530")
+					if n == 0:
+						base = base.lightened(0.08)
+					elif n == 4:
+						base = base.darkened(0.06)
+					# tiny blade accent
+					if x % 5 == 2 and y % 4 == 1:
+						base = Color("6BC84A")
 					img.set_pixel(x, y, base)
 		"path":
 			for y in 16:
 				for x in 16:
-					img.set_pixel(x, y, Color("D8C898") if (x + y) % 3 != 0 else Color("C8B888"))
+					var c := Color("D4C490") if (x + y) % 3 != 0 else Color("C4B480")
+					if (x * y) % 11 == 0:
+						c = c.darkened(0.05)
+					img.set_pixel(x, y, c)
 		"floor":
+			# Warm wood planks with grain
 			for y in 16:
 				for x in 16:
-					img.set_pixel(x, y, Color("E0C8A0") if (x / 4 + y / 4) % 2 == 0 else Color("D4BC94"))
+					var plank := y / 4
+					var base := Color("E2C8A0") if plank % 2 == 0 else Color("D6BC94")
+					if x == 0 or x == 8:
+						base = base.darkened(0.12)  # seam
+					elif (x + plank * 3) % 7 == 0:
+						base = base.darkened(0.04)  # grain
+					elif (x + y) % 13 == 0:
+						base = base.lightened(0.05)
+					img.set_pixel(x, y, base)
 		"wall":
-			img.fill(Color("F0E0C8"))
+			for y in 16:
+				for x in 16:
+					var c := Color("F0E4D0")
+					if y == 0 or y == 15:
+						c = Color("D8C8B0")
+					elif x % 8 == 0:
+						c = Color("E4D4BC")
+					img.set_pixel(x, y, c)
+		"bath_tile":
+			for y in 16:
+				for x in 16:
+					var c := Color("C8E8F0") if ((x / 8) + (y / 8)) % 2 == 0 else Color("B8DCE8")
+					if x % 8 == 0 or y % 8 == 0:
+						c = Color("A0C8D4")
+					img.set_pixel(x, y, c)
 		_:
 			img.fill(Color.MAGENTA)
 	return ImageTexture.create_from_image(img)

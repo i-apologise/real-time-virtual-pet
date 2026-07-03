@@ -1,6 +1,6 @@
 # Needs your review
 
-- **PR #12** — better 32px sprites + tutorial → adopt first
-  https://github.com/i-apologise/real-time-virtual-pet/pull/12
+- **PR #16** — care timer, bathroom clean, leash walk, human+pet beds
+  https://github.com/i-apologise/real-time-virtual-pet/pull/16
 
-See Files changed for `preview-sprites-v2.png` (trainer, slime, puppy, owl).
+Review **Files changed** for `docs/pr-screenshots/pr16-*.png`.

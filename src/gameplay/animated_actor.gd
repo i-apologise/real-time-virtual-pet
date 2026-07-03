@@ -1,5 +1,5 @@
 extends CharacterBody2D
-## Pixel actor: collision, walk-to, care anims. Acting state keeps anim from being overwritten.
+## Pixel actor with walk-to, care anims, optional pet follow.
 
 signal arrived
 signal anim_finished(anim_name: StringName)
@@ -15,11 +15,13 @@ const LAYER_PET := 4
 var _sprite: AnimatedSprite2D
 var _facing: String = "down"
 var _busy: bool = false
-var _acting: bool = false  # playing a one-shot care anim
+var _acting: bool = false
 var _walk_target: Variant = null
 var _arrive_threshold: float = 12.0
 var _collision: CollisionShape2D
 var _condition: String = "healthy"
+var _follow_target: Node2D = null  # leash follow
+var _follow_offset: Vector2 = Vector2(-18, 6)
 
 
 func setup_collision(as_pet: bool = false) -> void:
@@ -27,7 +29,7 @@ func setup_collision(as_pet: bool = false) -> void:
 	if _collision == null:
 		_collision = CollisionShape2D.new()
 		var shape := CircleShape2D.new()
-		shape.radius = 10.0 if as_pet else 9.0
+		shape.radius = 9.0 if as_pet else 9.0
 		_collision.shape = shape
 		_collision.position = Vector2(0, -2)
 		add_child(_collision)
@@ -49,6 +51,7 @@ func set_collision_enabled(enabled: bool) -> void:
 		collision_layer = LAYER_PET
 	else:
 		collision_layer = LAYER_PLAYER
+		collision_mask = LAYER_WORLD | LAYER_PET
 
 
 func setup_frames(frames: SpriteFrames, scale_mul: float = 2.0) -> void:
@@ -81,16 +84,32 @@ func set_condition(condition: String) -> void:
 			_sprite.modulate = Color.WHITE
 
 
-func set_busy(v: bool) -> void:
+func set_busy(v: bool, cancel_motion: bool = true) -> void:
 	_busy = v
-	if v:
+	if v and cancel_motion:
 		_walk_target = null
+		_follow_target = null
 	if not v:
 		_acting = false
 
 
 func set_acting(v: bool) -> void:
 	_acting = v
+	if not v and _sprite and _sprite.is_playing():
+		# leave final pose; director / play_idle will decide next
+		pass
+
+
+func set_follow(target: Node2D, offset: Vector2 = Vector2(-18, 6)) -> void:
+	_follow_target = target
+	_follow_offset = offset
+	_acting = false
+	_walk_target = null
+
+
+func clear_follow() -> void:
+	_follow_target = null
+	velocity = Vector2.ZERO
 
 
 func is_busy() -> bool:
@@ -128,13 +147,18 @@ func play_anim(anim: StringName) -> void:
 	if not _sprite.sprite_frames.has_animation(anim):
 		push_warning("Missing anim: %s" % anim)
 		return
+	# Force non-loop for care actions so they don't run forever
+	if _sprite.sprite_frames.has_animation(anim):
+		_sprite.sprite_frames.set_animation_loop(anim, false)
 	_acting = true
+	_sprite.stop()
 	_sprite.play(anim)
 
 
 func walk_to(world_pos: Vector2) -> void:
 	_walk_target = world_pos
 	_acting = false
+	_follow_target = null
 
 
 func _on_anim_finished() -> void:
@@ -142,15 +166,36 @@ func _on_anim_finished() -> void:
 		anim_finished.emit(_sprite.animation)
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	z_index = int(global_position.y)
 
-	if is_pet and not is_player_controlled:
+	# Leash follow mode (pet or escort)
+	if _follow_target != null and is_instance_valid(_follow_target):
+		var goal: Vector2 = _follow_target.global_position + _follow_offset
+		var to: Vector2 = goal - global_position
+		if to.length() > 6.0:
+			var dir := to.normalized()
+			velocity = dir * move_speed
+			move_and_slide()
+			_update_facing(dir)
+			var walk := "walk_%s" % _facing
+			if is_pet and _sprite and _sprite.sprite_frames.has_animation("walk"):
+				if _sprite.animation != &"walk" and not _acting:
+					_sprite.play("walk")
+			elif _sprite and _sprite.sprite_frames.has_animation(walk) and not _acting:
+				if _sprite.animation != walk:
+					_sprite.play(walk)
+		else:
+			velocity = Vector2.ZERO
+			move_and_slide()
+		return
+
+	# Pet idle / walk_to only
+	if is_pet and not is_player_controlled and _walk_target == null and not _acting:
 		velocity = Vector2.ZERO
 		move_and_slide()
 		return
 
-	# Pure acting pose (no walk): hold still, do not overwrite anim
 	if _acting and _walk_target == null:
 		velocity = Vector2.ZERO
 		move_and_slide()
@@ -161,41 +206,43 @@ func _physics_process(_delta: float) -> void:
 		move_and_slide()
 		return
 
-	var dir := Vector2.ZERO
+	var dir2 := Vector2.ZERO
 	if _walk_target != null:
-		var to: Vector2 = (_walk_target as Vector2) - global_position
-		if to.length() <= _arrive_threshold:
+		var to2: Vector2 = (_walk_target as Vector2) - global_position
+		if to2.length() <= _arrive_threshold:
 			_walk_target = null
 			velocity = Vector2.ZERO
-			# Do NOT play_idle here — care director will start action anim
 			arrived.emit()
 		else:
-			dir = to.normalized()
+			dir2 = to2.normalized()
 	elif is_player_controlled and not _busy and not _acting:
 		if Input.is_action_pressed("move_up"):
-			dir.y -= 1
+			dir2.y -= 1
 		if Input.is_action_pressed("move_down"):
-			dir.y += 1
+			dir2.y += 1
 		if Input.is_action_pressed("move_left"):
-			dir.x -= 1
+			dir2.x -= 1
 		if Input.is_action_pressed("move_right"):
-			dir.x += 1
-		if dir != Vector2.ZERO:
-			dir = dir.normalized()
+			dir2.x += 1
+		if dir2 != Vector2.ZERO:
+			dir2 = dir2.normalized()
 
-	velocity = dir * move_speed
+	velocity = dir2 * move_speed
 	move_and_slide()
 
-	if dir != Vector2.ZERO and not _acting:
-		_update_facing(dir)
-		var walk := "walk_%s" % _facing
-		if _sprite and _sprite.sprite_frames.has_animation(walk):
-			if _sprite.animation != walk:
-				_sprite.play(walk)
+	if dir2 != Vector2.ZERO and not _acting:
+		_update_facing(dir2)
+		var walk2 := "walk_%s" % _facing
+		if is_pet and _sprite and _sprite.sprite_frames.has_animation("walk"):
+			if _sprite.animation != &"walk":
+				_sprite.play("walk")
+		elif _sprite and _sprite.sprite_frames.has_animation(walk2):
+			if _sprite.animation != walk2:
+				_sprite.play(walk2)
 	elif not _busy and not _acting and _walk_target == null:
 		if _sprite:
 			var an := String(_sprite.animation)
-			if an.begins_with("walk"):
+			if an.begins_with("walk") or an == "walk":
 				play_idle()
 
 

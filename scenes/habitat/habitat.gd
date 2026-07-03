@@ -43,6 +43,11 @@ var _care_cursor: int = 0
 var _near_pet: bool = false
 var _care_menu_open: bool = false
 
+# Care action timer (center-top countdown)
+var _care_timer_panel: PanelContainer
+var _care_timer_label: Label
+var _care_timer_bar: ProgressBar
+
 
 func _ready() -> void:
 	y_sort_enabled = true
@@ -95,6 +100,28 @@ func _tile_floor(area: Rect2, kind: String) -> void:
 		y += 16
 
 
+func _add_decor_rect(rect: Rect2, color: Color, z: int = -80) -> ColorRect:
+	## Visual-only furniture (no collision) so actors can stand on beds/bath floor.
+	var r := ColorRect.new()
+	r.color = color
+	r.size = rect.size
+	r.position = rect.position
+	r.z_index = z
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_world.add_child(r)
+	return r
+
+
+func _add_decor_label(text: String, pos: Vector2, color: Color = Color(0.25, 0.22, 0.2)) -> void:
+	var lab := Label.new()
+	lab.text = text
+	lab.position = pos
+	lab.add_theme_font_size_override("font_size", 10)
+	lab.add_theme_color_override("font_color", color)
+	lab.z_index = -70
+	_world.add_child(lab)
+
+
 func _build_room() -> void:
 	_world = Node2D.new()
 	_world.y_sort_enabled = true
@@ -102,25 +129,43 @@ func _build_room() -> void:
 	add_child(_world)
 
 	_tile_floor(Rect2(0, 0, 480, 320), "floor")
-	# walls as colliders (top of room)
-	_add_static_rect(Rect2(0, 0, 480, 32), Color("E8DCC8"), -50)
-	_add_static_rect(Rect2(0, 0, 16, 320), Color("D8CCB8"))
-	_add_static_rect(Rect2(464, 0, 16, 320), Color("D8CCB8"))
-	_add_static_rect(Rect2(0, 304, 480, 16), Color("C8BCA8"))
-	# furniture
-	_add_static_rect(Rect2(48, 40, 64, 40), Color("85C1E9"))  # window sill block
-	_add_static_rect(Rect2(280, 150, 56, 40), Color("F5EEDE"))  # bed
-	_add_static_rect(Rect2(240, 175, 24, 14), Color("F5D76E"))  # bowl
-	_add_static_rect(Rect2(20, 200, 28, 48), Color("6E4B2E"))  # door block slightly open path
-	# leave gap at door for walking out — move door collider to sides only
-	# rug (no collision)
-	var rug := ColorRect.new()
-	rug.color = Color("A93226")
-	rug.size = Vector2(96, 64)
-	rug.position = Vector2(190, 160)
-	rug.z_index = -90
-	rug.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_world.add_child(rug)
+	# walls (solid)
+	_add_static_rect(Rect2(0, 0, 480, 28), Color("E8DCC8"), -50)
+	_add_static_rect(Rect2(0, 0, 14, 320), Color("D8CCB8"))
+	_add_static_rect(Rect2(466, 0, 14, 320), Color("D8CCB8"))
+	_add_static_rect(Rect2(0, 306, 480, 14), Color("C8BCA8"))
+
+	# --- Human bed (left) — visual only; thin headboard collides ---
+	_add_decor_rect(Rect2(36, 48, 80, 52), Color("4A6A7A"), -85)  # frame
+	_add_decor_rect(Rect2(40, 54, 72, 40), Color("6B9BB0"), -84)  # mattress
+	_add_decor_rect(Rect2(44, 56, 24, 14), Color("F2F0E8"), -83)  # pillow
+	_add_decor_rect(Rect2(48, 72, 56, 18), Color("C45C4A"), -83)  # blanket
+	_add_static_rect(Rect2(36, 44, 80, 8), Color("3A4A52"), -50)  # headboard only
+	_add_decor_label("Your bed", Vector2(48, 102), Color(0.85, 0.88, 0.9))
+
+	# --- Bathroom (top-right) — floor is walkable; fixtures are small solids ---
+	_tile_floor(Rect2(352, 32, 104, 88), "bath_tile")
+	_add_static_rect(Rect2(404, 40, 28, 22), Color("E8EEF2"))  # toilet base
+	_add_decor_rect(Rect2(408, 36, 20, 10), Color("F5F8FA"), -74)  # seat lid
+	_add_static_rect(Rect2(360, 40, 30, 18), Color("7EC8E0"))  # sink
+	_add_decor_rect(Rect2(366, 44, 18, 8), Color("A8E0F0"), -74)  # basin water
+	_add_decor_label("Bath", Vector2(388, 112), Color(0.15, 0.28, 0.38))
+
+	# --- Pet bed (cushion, walkable) ---
+	_add_decor_rect(Rect2(278, 158, 68, 40), Color("8B5A3C"), -88)  # outer rim
+	_add_decor_rect(Rect2(284, 164, 56, 28), Color("E8B888"), -87)  # cushion
+	_add_decor_rect(Rect2(292, 170, 40, 16), Color("F0D0A8"), -86)  # soft center
+	_add_decor_label("Pet bed", Vector2(288, 200), Color(0.55, 0.4, 0.28))
+
+	# --- Food bowl ---
+	_add_decor_rect(Rect2(248, 176, 26, 16), Color("C4A060"), -80)
+	_add_decor_rect(Rect2(252, 178, 18, 10), Color("F5D76E"), -79)
+	_add_decor_label("Bowl", Vector2(248, 194), Color(0.4, 0.35, 0.2))
+
+	# Door frame (leave gap)
+	_add_static_rect(Rect2(0, 200, 18, 20), Color("6E4B2E"))
+	_add_static_rect(Rect2(0, 268, 18, 40), Color("6E4B2E"))
+	_add_decor_rect(Rect2(160, 200, 96, 64), Color("A93226"), -92)  # rug
 
 	_day_overlay = ColorRect.new()
 	_day_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -143,14 +188,24 @@ func _build_actors() -> void:
 	_pet = AnimatedActorScr.new()
 	_pet.is_player_controlled = false
 	_pet.is_pet = true
-	_pet.move_speed = 0.0
+	_pet.move_speed = 95.0
 	_pet.position = Vector2(300, 175)
 	_world.add_child(_pet)
 	_reload_pet_sprites()
 	_pet.setup_collision(true)
 
+	# Leash visual (updated by CareDirector)
+	var leash := Line2D.new()
+	leash.name = "Leash"
+	leash.width = 2.5
+	leash.default_color = Color("6D4C41")
+	leash.visible = false
+	leash.z_index = 50
+	_world.add_child(leash)
+	set_meta("leash_line", leash)
+
 	_camera = Camera2D.new()
-	_camera.zoom = Vector2(2.5, 2.5)  # chunky pokemon zoom
+	_camera.zoom = Vector2(2.5, 2.5)
 	_camera.position = Vector2(0, -8)
 	_human.add_child(_camera)
 	_camera.make_current()
@@ -211,17 +266,31 @@ func _apply_pet_condition_visual() -> void:
 func _wire_director() -> void:
 	_director = CareDirectorScr.new()
 	add_child(_director)
+	# Spots sit on walkable floor near furniture (not inside solid colliders)
 	var spots := {
-		"feed": Vector2(270, 185),
-		"play": Vector2(275, 190),
-		"walk": Vector2(275, 190),
-		"clean": Vector2(280, 185),
-		"sleep": Vector2(290, 175),
-		"wake": Vector2(290, 175),
+		"bathroom": Vector2(372, 118),
+		"bathroom_pet": Vector2(400, 120),
+		"bowl": Vector2(258, 196),
+		"pet_bed": Vector2(312, 188),
+		"human_bed": Vector2(76, 108),
+		"human_bed_side": Vector2(100, 112),
+		"play": Vector2(210, 220),
+		"walk_a": Vector2(150, 250),
+		"walk_b": Vector2(390, 255),
+		"walk_home": Vector2(230, 210),
+		"feed": Vector2(250, 196),
+		"clean": Vector2(372, 118),
+		"sleep": Vector2(312, 188),
+		"wake": Vector2(312, 188),
+		"walk": Vector2(300, 188),
 	}
-	_director.setup(_human, _pet, spots)
+	var leash: Line2D = get_meta("leash_line") as Line2D
+	_director.setup(_human, _pet, spots, leash)
 	_director.toast.connect(_show_toast)
+	_director.timer_tick.connect(_on_care_timer)
+	_director.timer_done.connect(_on_care_timer_done)
 	_director.choreography_finished.connect(func(_a, _r):
+		_hide_care_timer()
 		_refresh_all()
 		_apply_pet_condition_visual()
 	)
@@ -363,6 +432,61 @@ func _build_hud() -> void:
 	_debug.add_theme_font_size_override("font_size", 10)
 	_debug.modulate = Color(0.7, 1, 0.8)
 	layer.add_child(_debug)
+
+	# --- Care timer (center-top) ---
+	_care_timer_panel = PanelContainer.new()
+	_care_timer_panel.visible = false
+	_care_timer_panel.position = Vector2(520, 8)
+	layer.add_child(_care_timer_panel)
+	var timer_v := VBoxContainer.new()
+	timer_v.add_theme_constant_override("separation", 4)
+	_care_timer_panel.add_child(timer_v)
+	_care_timer_label = Label.new()
+	_care_timer_label.text = "Care 0.0s"
+	_care_timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_care_timer_label.add_theme_font_size_override("font_size", 14)
+	_care_timer_label.add_theme_color_override("font_color", Color(0.12, 0.12, 0.16))
+	timer_v.add_child(_care_timer_label)
+	_care_timer_bar = ProgressBar.new()
+	_care_timer_bar.custom_minimum_size = Vector2(160, 12)
+	_care_timer_bar.max_value = 1.0
+	_care_timer_bar.value = 1.0
+	_care_timer_bar.show_percentage = false
+	timer_v.add_child(_care_timer_bar)
+	call_deferred("_place_care_timer")
+
+
+func _on_care_timer(seconds_left: float, total: float, label: String) -> void:
+	if _care_timer_panel == null:
+		return
+	_care_timer_panel.visible = true
+	_place_care_timer()
+	var t := maxf(0.0, seconds_left)
+	_care_timer_label.text = "%s  %.1fs" % [label, t]
+	if total > 0.0:
+		_care_timer_bar.max_value = total
+		_care_timer_bar.value = t
+	# Urgency color as time runs out
+	if total > 0.0 and t / total < 0.25:
+		_care_timer_bar.modulate = Color(1.0, 0.55, 0.4)
+	else:
+		_care_timer_bar.modulate = Color(0.55, 0.85, 1.0)
+
+
+func _on_care_timer_done() -> void:
+	_hide_care_timer()
+
+
+func _hide_care_timer() -> void:
+	if _care_timer_panel:
+		_care_timer_panel.visible = false
+
+
+func _place_care_timer() -> void:
+	if _care_timer_panel == null:
+		return
+	var vp := get_viewport().get_visible_rect().size
+	_care_timer_panel.position = Vector2(vp.x * 0.5 - 90.0, 8.0)
 
 
 func _place_stats_panel() -> void:

@@ -21,3 +21,16 @@ Follow `docs/design-real-time-virtual-pet.md` PR plan unless the user reorders.
 ## Private repo
 
 This project is private. Keep evidence in-repo under `docs/pr-screenshots/`. Do not publish game assets to public pastes or a public screenshot repo unless the user asks.
+
+## User notification (mandatory when opening a PR)
+
+GitHub **will not reliably notify the user** when PRs are created with their own `gh` token.
+
+Whenever you open or update a PR that needs merge:
+
+1. Write/update `docs/NEEDS-YOUR-REVIEW.md` with the PR number, title, and full URL at the top.
+2. Append a line to `docs/agent-progress.md`: `NEEDS REVIEW: PR #N — url`
+3. Prefer including the URL in any status the parent/watchdog will surface.
+
+Do not assume the user saw the PR.
+

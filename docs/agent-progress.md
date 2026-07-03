@@ -12,4 +12,7 @@
 | 2026-07-03T10:20Z | Note: GitHub does **not** notify for PRs opened by your own token. Use **NEEDS-YOUR-REVIEW.md**, https://github.com/i-apologise/real-time-virtual-pet/pulls , or Watch → All activity. |
 | 2026-07-03T10:20Z | Added NEEDS-YOUR-REVIEW.md + agent notify protocol (PR #6 docs). |
 | 2026-07-03 | Fixed merge conflict on PR #6 (`docs/agent-progress.md` only). |
+| 2026-07-03 | **PR #5 (C+D) MERGED.** Implementing **PR E** polish/export/validation (debug clock, dig hold, README 0.1.0). |
+| 2026-07-03 | Opened **PR #7 (E)** polish 0.1.0 — CI green. Polling user merge. MVP loop complete pending E merge. |
+| 2026-07-03 | Fixed merge conflict on PR #7 (`docs/agent-progress.md` only). |
 

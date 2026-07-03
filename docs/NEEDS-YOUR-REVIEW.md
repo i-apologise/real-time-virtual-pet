@@ -13,7 +13,7 @@ Agents open PRs with **your** GitHub account via `gh`. GitHub treats that as **y
 
 ## Open PRs right now
 
-- **PR #6** — docs: surface open PRs for user review (notification gap)
-  https://github.com/i-apologise/real-time-virtual-pet/pull/6
+- **PR #7** — feat: 0.1.0 polish — debug clock, dig ritual, validation README (PR E)
+  https://github.com/i-apologise/real-time-virtual-pet/pull/7
 
-Last updated: 2026-07-03T10:23Z UTC
+Last updated: 2026-07-03T10:27Z UTC

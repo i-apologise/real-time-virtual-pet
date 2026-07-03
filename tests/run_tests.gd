@@ -1,9 +1,11 @@
 extends SceneTree
-## Zero-dependency test runner (PR1).
+## Zero-dependency test runner.
 ## Usage: godot --headless --path . -s res://tests/run_tests.gd
 
 const TEST_SCRIPTS := [
 	"res://tests/test_bootstrap.gd",
+	"res://tests/test_time_utils.gd",
+	"res://tests/test_name_utils.gd",
 ]
 
 

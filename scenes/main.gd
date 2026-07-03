@@ -1,5 +1,7 @@
 extends Control
-## Bootstrap main scene (PR1). Placeholder until town hub ships.
+## Main shell — shows TimeService / NameUtils (PR2).
+
+const NameUtils := preload("res://src/util/name_utils.gd")
 
 @onready var _title: Label = %TitleLabel
 @onready var _subtitle: Label = %SubtitleLabel
@@ -10,10 +12,24 @@ extends Control
 
 func _ready() -> void:
 	_title.text = "Real-Time Virtual Pet"
-	_subtitle.text = "PR1 bootstrap — Godot 4.3 project shell"
+	_subtitle.text = "PR2 — TimeService + NameUtils"
 	_status.text = PetController.get_status_line()
-	_phase.text = "Local phase: %s" % str(TimeService.local_day_phase())
-	_hints.text = "Controls (planned): WASD move · E interact · care on action bar\nPOIs: House · Park · Store · Graveyard · AI homes\nOnly pets have needs; humans are invincible."
-	print("[main] Real-Time Virtual Pet PR1 ready")
-	print("[main] TimeService phase=", TimeService.local_day_phase())
-	print("[main] SceneRouter house=", SceneRouter.describe_poi(SceneRouter.Poi.HOUSE))
+	var phase: StringName = TimeService.local_day_phase()
+	var unix: float = TimeService.now_unix_utc()
+	_phase.text = "UTC now: %.0f  ·  local phase: %s  ·  night=%s" % [
+		unix, str(phase), str(TimeService.is_local_night())
+	]
+	var sample := "  Mochi\n"
+	var ok: bool = NameUtils.is_valid_name(sample)
+	_hints.text = (
+		"NameUtils: sanitize => '%s' valid=%s (min %d max %d)\n"
+		+ "Controls (planned): WASD move · E interact · care on action bar\n"
+		+ "Only pets have needs; humans are invincible."
+	) % [
+		NameUtils.sanitize_name(sample),
+		str(ok),
+		NameUtils.NAME_MIN_LEN,
+		NameUtils.NAME_MAX_LEN,
+	]
+	print("[main] phase=", phase, " unix=", unix)
+	print("[main] name sample valid=", ok)

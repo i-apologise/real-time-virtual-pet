@@ -44,6 +44,21 @@ The template in `.github/PULL_REQUEST_TEMPLATE.md` must stay filled:
 
 ### Embedding images
 
+### Private repository image URLs (required)
+
+Do **not** use `https://raw.githubusercontent.com/...` in PR bodies for a **private** repo — browsers often fail to load them (no auth cookies on that host).
+
+**Use instead (same-site, works when logged into GitHub):**
+
+```markdown
+![desc](https://github.com/OWNER/REPO/raw/BRANCH/path/to/image.png)
+```
+
+Or upload/paste images in the GitHub web UI (preferred — `user-attachments` URLs).
+
+After merge, prefer `raw/main/...` or paste-upload for long-lived links.
+
+
 Preferred:
 
 ```markdown

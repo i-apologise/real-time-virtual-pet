@@ -37,6 +37,7 @@ func _process(delta: float) -> void:
 		_to_b = not _to_b
 		return
 	global_position += dir.normalized() * _speed * delta
+	z_index = int(global_position.y)
 	if _sprite:
 		var anim := "walk_right" if dir.x >= 0.0 else "walk_left"
 		if _sprite.animation != anim:

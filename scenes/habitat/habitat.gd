@@ -1,19 +1,22 @@
 extends Node2D
-## 2D house simulation: animated human + pet, care choreography, HUD overlay.
+## Pokemon-style house: pixel tiles, collisions, near-pet stats only, care choreography.
 
 const SpriteFactoryScr = preload("res://src/gameplay/sprite_factory.gd")
 const AnimatedActorScr = preload("res://src/gameplay/animated_actor.gd")
 const CareDirectorScr = preload("res://src/gameplay/care_director.gd")
 const MoodStateMachineScr = preload("res://src/sim/mood_state_machine.gd")
 
+const NEAR_PET_DIST := 56.0
+const LAYER_WORLD := 1
+
 var _human: CharacterBody2D
 var _pet: CharacterBody2D
 var _director: Node
 var _camera: Camera2D
+var _world: Node2D
 
-# HUD
-var _meters: Dictionary = {}
-var _status: Label
+# Minimal always-on HUD
+var _hint: Label
 var _toast: Label
 var _counter: Label
 var _action_row: HBoxContainer
@@ -27,10 +30,18 @@ var _digging: bool = false
 var _dig_accum: float = 0.0
 const DIG_HOLD_SEC := 3.0
 
+# Near-pet floating stats (not a permanent box)
+var _pet_stats_root: Node2D
+var _pet_stats_bg: Polygon2D
+var _pet_stats_label: Label
+var _near_pet: bool = false
+
 
 func _ready() -> void:
+	y_sort_enabled = true
 	_build_room()
 	_build_actors()
+	_build_pet_stats_bubble()
 	_build_hud()
 	_wire_director()
 	if not EventBus.pet_updated.is_connected(_on_pet_updated):
@@ -40,209 +51,273 @@ func _ready() -> void:
 	_refresh_all()
 
 
+func _add_static_rect(rect: Rect2, color: Color, z: int = 0) -> void:
+	var body := StaticBody2D.new()
+	body.position = rect.position + rect.size * 0.5
+	body.collision_layer = LAYER_WORLD
+	body.collision_mask = 0
+	body.z_index = int(body.position.y)
+	var shape := CollisionShape2D.new()
+	var rect_shape := RectangleShape2D.new()
+	rect_shape.size = rect.size
+	shape.shape = rect_shape
+	body.add_child(shape)
+	var vis := ColorRect.new()
+	vis.size = rect.size
+	vis.position = -rect.size * 0.5
+	vis.color = color
+	vis.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	body.add_child(vis)
+	_world.add_child(body)
+
+
+func _tile_floor(area: Rect2, kind: String) -> void:
+	var tex: Texture2D = SpriteFactoryScr.make_tile(kind)
+	var x := int(area.position.x)
+	var y := int(area.position.y)
+	while y < int(area.end.y):
+		x = int(area.position.x)
+		while x < int(area.end.x):
+			var spr := Sprite2D.new()
+			spr.texture = tex
+			spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			spr.position = Vector2(x + 8, y + 8)
+			spr.scale = Vector2(1, 1)
+			spr.z_index = -100
+			_world.add_child(spr)
+			x += 16
+		y += 16
+
+
 func _build_room() -> void:
-	# Floor
-	var floor := ColorRect.new()
-	floor.color = Color(0.45, 0.36, 0.28)
-	floor.size = Vector2(960, 540)
-	floor.position = Vector2(0, 0)
-	floor.z_index = -10
-	add_child(floor)
-	# rug
+	_world = Node2D.new()
+	_world.y_sort_enabled = true
+	_world.name = "World"
+	add_child(_world)
+
+	_tile_floor(Rect2(0, 0, 480, 320), "floor")
+	# walls as colliders (top of room)
+	_add_static_rect(Rect2(0, 0, 480, 32), Color("E8DCC8"), -50)
+	_add_static_rect(Rect2(0, 0, 16, 320), Color("D8CCB8"))
+	_add_static_rect(Rect2(464, 0, 16, 320), Color("D8CCB8"))
+	_add_static_rect(Rect2(0, 304, 480, 16), Color("C8BCA8"))
+	# furniture
+	_add_static_rect(Rect2(48, 40, 64, 40), Color("85C1E9"))  # window sill block
+	_add_static_rect(Rect2(280, 150, 56, 40), Color("F5EEDE"))  # bed
+	_add_static_rect(Rect2(240, 175, 24, 14), Color("F5D76E"))  # bowl
+	_add_static_rect(Rect2(20, 200, 28, 48), Color("6E4B2E"))  # door block slightly open path
+	# leave gap at door for walking out — move door collider to sides only
+	# rug (no collision)
 	var rug := ColorRect.new()
-	rug.color = Color(0.55, 0.25, 0.25)
-	rug.size = Vector2(220, 140)
-	rug.position = Vector2(370, 280)
-	rug.z_index = -9
-	add_child(rug)
-	# wall
-	var wall := ColorRect.new()
-	wall.color = Color(0.72, 0.68, 0.58)
-	wall.size = Vector2(960, 120)
-	wall.position = Vector2(0, 0)
-	wall.z_index = -8
-	add_child(wall)
-	# window
-	var window := ColorRect.new()
-	window.color = Color(0.55, 0.75, 0.95)
-	window.size = Vector2(100, 70)
-	window.position = Vector2(80, 30)
-	window.z_index = -7
-	add_child(window)
-	# bed / cushion for pet
-	var bed := ColorRect.new()
-	bed.color = Color(0.85, 0.8, 0.7)
-	bed.size = Vector2(80, 50)
-	bed.position = Vector2(520, 300)
-	bed.z_index = -6
-	add_child(bed)
-	var bed_l := Label.new()
-	bed_l.text = "pet bed"
-	bed_l.position = Vector2(528, 350)
-	bed_l.z_index = -5
-	bed_l.add_theme_font_size_override("font_size", 11)
-	add_child(bed_l)
-	# bowl
-	var bowl := ColorRect.new()
-	bowl.color = Color(0.9, 0.85, 0.5)
-	bowl.size = Vector2(28, 16)
-	bowl.position = Vector2(470, 330)
-	bowl.z_index = -6
-	add_child(bowl)
-	# door to town
-	var door := ColorRect.new()
-	door.color = Color(0.4, 0.28, 0.18)
-	door.size = Vector2(50, 80)
-	door.position = Vector2(20, 400)
-	door.z_index = -6
-	add_child(door)
-	var door_l := Label.new()
-	door_l.text = "Town (E)"
-	door_l.position = Vector2(14, 480)
-	door_l.add_theme_font_size_override("font_size", 11)
-	add_child(door_l)
+	rug.color = Color("A93226")
+	rug.size = Vector2(96, 64)
+	rug.position = Vector2(190, 160)
+	rug.z_index = -90
+	rug.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_world.add_child(rug)
 
 	_day_overlay = ColorRect.new()
 	_day_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_day_overlay.color = Color(0, 0, 0, 0)
-	_day_overlay.size = Vector2(960, 540)
-	_day_overlay.z_index = 50
+	_day_overlay.size = Vector2(480, 320)
+	_day_overlay.z_index = 400
 	add_child(_day_overlay)
 
 
 func _build_actors() -> void:
 	_human = AnimatedActorScr.new()
 	_human.is_player_controlled = true
-	_human.move_speed = 160.0
-	_human.position = Vector2(200, 380)
-	add_child(_human)
-	_human.setup_frames(SpriteFactoryScr.human_frames(), 2.2)
+	_human.is_pet = false
+	_human.move_speed = 100.0
+	_human.position = Vector2(120, 220)
+	_world.add_child(_human)
+	_human.setup_frames(SpriteFactoryScr.human_frames(), 3.0)
+	_human.setup_collision(false)
 
 	_pet = AnimatedActorScr.new()
 	_pet.is_player_controlled = false
-	_pet.move_speed = 90.0
-	_pet.position = Vector2(540, 320)
-	add_child(_pet)
+	_pet.is_pet = true
+	_pet.move_speed = 0.0
+	_pet.position = Vector2(300, 175)
+	_world.add_child(_pet)
 	_reload_pet_sprites()
+	_pet.setup_collision(true)
 
 	_camera = Camera2D.new()
-	_camera.position = Vector2(0, -20)
+	_camera.zoom = Vector2(2.2, 2.2)  # chunky pokemon zoom
+	_camera.position = Vector2(0, -8)
 	_human.add_child(_camera)
 	_camera.make_current()
-	# Keep house framed
 	_camera.limit_left = 0
 	_camera.limit_top = 0
-	_camera.limit_right = 960
-	_camera.limit_bottom = 540
+	_camera.limit_right = 480
+	_camera.limit_bottom = 320
+	_camera.position_smoothing_enabled = true
+	_camera.position_smoothing_speed = 8.0
+
+
+func _build_pet_stats_bubble() -> void:
+	_pet_stats_root = Node2D.new()
+	_pet_stats_root.z_index = 500
+	_pet_stats_root.visible = false
+	_world.add_child(_pet_stats_root)
+	# speech-bubble style panel (drawn as ColorRect stack, not permanent HUD box)
+	var bg := ColorRect.new()
+	bg.size = Vector2(108, 62)
+	bg.position = Vector2(-54, -78)
+	bg.color = Color(1, 1, 1, 0.92)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pet_stats_root.add_child(bg)
+	var edge := ColorRect.new()
+	edge.size = Vector2(110, 64)
+	edge.position = Vector2(-55, -79)
+	edge.color = Color(0.15, 0.15, 0.2, 0.9)
+	edge.z_index = -1
+	edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pet_stats_root.add_child(edge)
+	_pet_stats_label = Label.new()
+	_pet_stats_label.position = Vector2(-50, -76)
+	_pet_stats_label.add_theme_font_size_override("font_size", 10)
+	_pet_stats_label.add_theme_color_override("font_color", Color(0.1, 0.1, 0.15))
+	_pet_stats_label.text = ""
+	_pet_stats_root.add_child(_pet_stats_label)
 
 
 func _reload_pet_sprites() -> void:
 	var sid := "blob"
 	if PetController.active_pet != null:
 		sid = String(PetController.active_pet.species_id)
-	_pet.setup_frames(SpriteFactoryScr.pet_frames(sid), 2.4)
+	_pet.is_pet = true
+	_pet.setup_frames(SpriteFactoryScr.pet_frames(sid), 3.2)
+	_pet.setup_collision(true)
+	_apply_pet_condition_visual()
+
+
+func _condition_from_pet(p) -> String:
+	if p == null:
+		return "healthy"
+	var life := str(p.life_state)
+	if life == "DEAD":
+		return "dead"
+	if life == "DYING" or p.hunger <= 0.0 or p.energy <= 5.0:
+		return "weak"
+	if life == "CRITICAL" or p.hunger < 20.0:
+		return "hungry"
+	if p.hunger < 40.0 or p.happiness < 30.0:
+		return "hungry"
+	return "healthy"
+
+
+func _apply_pet_condition_visual() -> void:
+	if _pet == null or PetController.active_pet == null:
+		return
+	var cond := _condition_from_pet(PetController.active_pet)
+	_pet.set_condition(cond)
+	# play matching body language
+	match cond:
+		"dead":
+			_pet.play_anim(&"dead")
+		"weak":
+			_pet.play_anim(&"weak")
+		"hungry":
+			_pet.play_anim(&"hungry")
+		_:
+			if PetController.active_pet.is_sleeping():
+				_pet.play_anim(&"sleep")
+			elif PetController.active_pet.happiness >= 75.0:
+				_pet.play_anim(&"happy")
+			else:
+				_pet.play_anim(&"idle")
 
 
 func _wire_director() -> void:
 	_director = CareDirectorScr.new()
 	add_child(_director)
 	var spots := {
-		"feed": Vector2(490, 340),
-		"play": Vector2(500, 340),
-		"walk": Vector2(500, 340),
-		"clean": Vector2(510, 340),
-		"sleep": Vector2(520, 330),
-		"wake": Vector2(520, 330),
+		"feed": Vector2(270, 185),
+		"play": Vector2(275, 190),
+		"walk": Vector2(275, 190),
+		"clean": Vector2(280, 185),
+		"sleep": Vector2(290, 175),
+		"wake": Vector2(290, 175),
 	}
 	_director.setup(_human, _pet, spots)
 	_director.toast.connect(_show_toast)
-	_director.choreography_finished.connect(func(_a, _r): _refresh_all())
+	_director.choreography_finished.connect(func(_a, _r):
+		_refresh_all()
+		_apply_pet_condition_visual()
+	)
 
 
 func _build_hud() -> void:
 	var layer := CanvasLayer.new()
-	layer.layer = 20
+	layer.layer = 30
 	add_child(layer)
 
-	var root := VBoxContainer.new()
-	root.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	root.offset_left = 8
-	root.offset_top = 8
-	root.offset_right = -8
-	root.offset_bottom = 200
-	layer.add_child(root)
-
+	# Top slim bar only — NO permanent meter boxes
 	var top := HBoxContainer.new()
-	root.add_child(top)
-	var title := Label.new()
-	title.text = "House — WASD move · 1-6 care · E town door"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(title)
+	top.position = Vector2(8, 6)
+	layer.add_child(top)
 	_counter = Label.new()
-	_counter.text = "Deaths: 0 · Graves: 0"
+	_counter.add_theme_font_size_override("font_size", 12)
+	_counter.add_theme_color_override("font_color", Color(1, 1, 1))
+	_counter.text = "Deaths 0 · Graves 0"
 	top.add_child(_counter)
 
-	_status = Label.new()
-	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	root.add_child(_status)
+	_hint = Label.new()
+	_hint.position = Vector2(8, 24)
+	_hint.add_theme_font_size_override("font_size", 11)
+	_hint.add_theme_color_override("font_color", Color(0.95, 0.95, 0.85))
+	_hint.text = "WASD move · near pet to see needs · 1-6 care"
+	layer.add_child(_hint)
+
 	_toast = Label.new()
-	_toast.modulate = Color(1, 1, 0.65)
-	root.add_child(_toast)
+	_toast.position = Vector2(8, 40)
+	_toast.add_theme_font_size_override("font_size", 12)
+	_toast.modulate = Color(1, 1, 0.6)
+	layer.add_child(_toast)
 
-	var meter_box := HBoxContainer.new()
-	meter_box.add_theme_constant_override("separation", 10)
-	root.add_child(meter_box)
-	for stat in ["hunger", "energy", "happiness", "hygiene"]:
-		var col := VBoxContainer.new()
-		meter_box.add_child(col)
-		var lab := Label.new()
-		lab.text = stat.substr(0, 3).to_upper()
-		lab.add_theme_font_size_override("font_size", 11)
-		col.add_child(lab)
-		var bar := ProgressBar.new()
-		bar.custom_minimum_size = Vector2(90, 14)
-		bar.max_value = 100
-		col.add_child(bar)
-		_meters[stat] = bar
-
+	# Action bar only when near pet (and alive)
 	_action_row = HBoxContainer.new()
-	_action_row.add_theme_constant_override("separation", 6)
-	root.add_child(_action_row)
-	var keys := ["1 Feed", "2 Walk", "3 Play", "4 Clean", "5 Sleep", "6 Wake"]
+	_action_row.position = Vector2(8, 280)
+	_action_row.add_theme_constant_override("separation", 4)
+	_action_row.visible = false
+	layer.add_child(_action_row)
+	var labels := ["1 Feed", "2 Walk", "3 Play", "4 Clean", "5 Sleep", "6 Wake"]
 	var actions := ["feed", "walk", "play", "clean", "sleep", "wake"]
 	for i in actions.size():
 		var btn := Button.new()
-		btn.text = keys[i]
-		btn.pressed.connect(_on_care_pressed.bind(StringName(actions[i])))
+		btn.text = labels[i]
+		btn.add_theme_font_size_override("font_size", 11)
+		btn.pressed.connect(_on_care.bind(StringName(actions[i])))
 		_action_row.add_child(btn)
 
 	var nav := HBoxContainer.new()
-	root.add_child(nav)
-	for item in [["Town", "town"], ["Store", "pet_store"], ["Graveyard", "graveyard"]]:
+	nav.position = Vector2(300, 6)
+	layer.add_child(nav)
+	for item in [["Town", "town"], ["Store", "pet_store"], ["Yard", "graveyard"]]:
 		var b := Button.new()
 		b.text = item[0]
+		b.add_theme_font_size_override("font_size", 11)
 		b.pressed.connect(func(): SceneRouter.go(item[1]))
 		nav.add_child(b)
 
-	_empty_panel = _banner("No living pet — adopt to start the simulation.")
+	_empty_panel = _panel("No pet yet — adopt to begin.")
 	var adopt := Button.new()
-	adopt.text = "Adopt Cozy Blob (quick)"
+	adopt.text = "Adopt Blob"
 	adopt.pressed.connect(func():
 		PetController.debug_adopt_blob("Mochi")
 		_reload_pet_sprites()
-		_show_toast("Adopted Mochi!")
+		_show_toast("Mochi joined!")
 		_refresh_all()
 	)
 	_empty_panel.get_child(0).add_child(adopt)
-	var store := Button.new()
-	store.text = "Pet Store"
-	store.pressed.connect(func(): SceneRouter.go("pet_store"))
-	_empty_panel.get_child(0).add_child(store)
 	layer.add_child(_empty_panel)
-	_empty_panel.position = Vector2(280, 180)
+	_empty_panel.position = Vector2(150, 100)
 
-	_death_panel = _banner("Your pet died. Hold Dig Grave to bury them.")
+	_death_panel = _panel("Pet has died. Hold Dig Grave.")
 	_dig_progress = ProgressBar.new()
+	_dig_progress.custom_minimum_size = Vector2(160, 12)
 	_dig_progress.max_value = 100
 	_death_panel.get_child(0).add_child(_dig_progress)
 	var dig := Button.new()
@@ -250,7 +325,7 @@ func _build_hud() -> void:
 	dig.button_down.connect(func():
 		_digging = true
 		_dig_accum = 0.0
-		if _director and _human:
+		if _human:
 			_human.set_busy(true)
 			_human.play_anim(&"dig")
 	)
@@ -264,35 +339,30 @@ func _build_hud() -> void:
 	)
 	_death_panel.get_child(0).add_child(dig)
 	layer.add_child(_death_panel)
-	_death_panel.position = Vector2(280, 180)
+	_death_panel.position = Vector2(150, 100)
 
 	_debug = Label.new()
 	_debug.visible = false
-	_debug.position = Vector2(8, 420)
+	_debug.position = Vector2(8, 200)
+	_debug.add_theme_font_size_override("font_size", 10)
 	_debug.modulate = Color(0.7, 1, 0.8)
 	layer.add_child(_debug)
 
-	var help := Label.new()
-	help.position = Vector2(8, 500)
-	help.add_theme_font_size_override("font_size", 12)
-	help.modulate = Color(0.85, 0.85, 0.9)
-	help.text = "Gameplay: walk with WASD · care plays character animations · pets only have needs"
-	layer.add_child(help)
 
-
-func _banner(text: String) -> PanelContainer:
+func _panel(text: String) -> PanelContainer:
 	var p := PanelContainer.new()
 	var v := VBoxContainer.new()
 	p.add_child(v)
 	var l := Label.new()
 	l.text = text
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.custom_minimum_size = Vector2(360, 0)
+	l.custom_minimum_size = Vector2(200, 0)
 	v.add_child(l)
 	return p
 
 
 func _process(delta: float) -> void:
+	_update_near_pet_ui()
 	if _digging:
 		_dig_accum += delta
 		_dig_progress.value = (_dig_accum / DIG_HOLD_SEC) * 100.0
@@ -303,13 +373,45 @@ func _process(delta: float) -> void:
 				_human.set_busy(false)
 				_human.play_idle()
 			var r: Dictionary = PetController.complete_burial("")
-			_show_toast("Burial complete" if r.get("ok", false) else str(r.get("reason", "fail")))
+			_show_toast("Buried." if r.get("ok", false) else str(r.get("reason", "")))
 			_refresh_all()
-
-	# Door interact
-	if _human and _human.global_position.distance_to(Vector2(45, 440)) < 55.0:
+	# door exit (left side gap)
+	if _human and _human.position.x < 40.0 and _human.position.y > 200.0:
 		if Input.is_action_just_pressed("interact"):
 			SceneRouter.go("town")
+
+
+func _update_near_pet_ui() -> void:
+	if _human == null or _pet == null or not _pet.visible:
+		_near_pet = false
+		_pet_stats_root.visible = false
+		_action_row.visible = false
+		return
+	var dist := _human.global_position.distance_to(_pet.global_position)
+	_near_pet = dist <= NEAR_PET_DIST and PetController.active_pet != null
+	var life := ""
+	if PetController.active_pet:
+		life = str(PetController.active_pet.life_state)
+	_pet_stats_root.visible = _near_pet and life != "DEAD"
+	_action_row.visible = _near_pet and life != "DEAD" and life != ""
+	if _near_pet and PetController.active_pet:
+		_pet_stats_root.global_position = _pet.global_position
+		var p = PetController.active_pet
+		var cond := _condition_from_pet(p)
+		_pet_stats_label.text = "%s\nHun %d  Ene %d\nHap %d  Hyg %d\n[%s]" % [
+			p.name,
+			int(p.hunger),
+			int(p.energy),
+			int(p.happiness),
+			int(p.hygiene),
+			cond,
+		]
+		if _near_pet:
+			_hint.text = "Near %s — 1-6 to care · body shows how they feel" % p.name
+	elif PetController.active_pet == null:
+		_hint.text = "Adopt a pet · WASD · E at door for town"
+	else:
+		_hint.text = "Walk near your pet to see how they feel · WASD"
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -321,126 +423,91 @@ func _unhandled_input(event: InputEvent) -> void:
 		_debug.visible = _debug_visible
 		_update_debug()
 	elif k.keycode == KEY_F7:
-		_debug_advance(3600.0)
+		_dbg(3600.0)
 	elif k.keycode == KEY_F8:
-		_debug_advance(3.0 * 86400.0)
+		_dbg(3.0 * 86400.0)
 	elif k.keycode == KEY_F9:
-		_debug_advance(2.0 * 3600.0)
+		_dbg(2.0 * 3600.0)
 	elif k.keycode == KEY_1:
-		_on_care_pressed(&"feed")
+		_on_care(&"feed")
 	elif k.keycode == KEY_2:
-		_on_care_pressed(&"walk")
+		_on_care(&"walk")
 	elif k.keycode == KEY_3:
-		_on_care_pressed(&"play")
+		_on_care(&"play")
 	elif k.keycode == KEY_4:
-		_on_care_pressed(&"clean")
+		_on_care(&"clean")
 	elif k.keycode == KEY_5:
-		_on_care_pressed(&"sleep")
+		_on_care(&"sleep")
 	elif k.keycode == KEY_6:
-		_on_care_pressed(&"wake")
+		_on_care(&"wake")
 
 
-func _on_care_pressed(action: StringName) -> void:
+func _on_care(action: StringName) -> void:
+	if not _near_pet and action != &"dig":
+		_show_toast("Get closer to your pet")
+		return
 	if _director and _director.is_busy():
-		_show_toast("Busy…")
+		_show_toast("…")
 		return
 	var r: Dictionary = _director.try_start_care(action)
 	if not r.get("ok", false):
-		_show_toast("Can't %s: %s" % [str(action), str(r.get("reason", ""))])
+		_show_toast(str(r.get("reason", "no")))
 
 
-func _debug_advance(sec: float) -> void:
+func _dbg(sec: float) -> void:
 	TimeService.add_debug_offset_sec(sec)
 	PetController.on_focus_resume()
-	_show_toast("Debug clock +%.0fs" % sec)
+	_show_toast("Time +%.0fs" % sec)
 	_refresh_all()
+	_apply_pet_condition_visual()
 
 
 func _show_toast(msg: String) -> void:
-	if _toast:
-		_toast.text = msg
+	_toast.text = msg
 
 
-func _on_pet_updated(snap: Dictionary) -> void:
-	_apply_snap(snap)
-	_update_debug()
-	_sync_pet_visual()
+func _on_pet_updated(_snap: Dictionary) -> void:
+	_refresh_all()
+	_apply_pet_condition_visual()
 
 
 func _on_profile(snap: Dictionary) -> void:
-	_counter.text = "Deaths: %d · Graves: %d" % [
+	_counter.text = "Deaths %d · Graves %d" % [
 		int(snap.get("total_pets_died", 0)), int(snap.get("total_graves_dug", 0))
 	]
 
 
 func _refresh_all() -> void:
-	if PetController.active_pet != null:
-		var mood = MoodStateMachineScr.derive_mood(PetController.active_pet)
-		var snap: Dictionary = PetController.active_pet.to_view_dict(mood)
-		var st: Dictionary = StatusCopy.status_for_pet(PetController.active_pet)
-		snap["status_message"] = st.get("message", "")
-		snap["local_day_phase"] = TimeService.local_day_phase()
-		_apply_snap(snap)
-	else:
-		_apply_snap({})
-	_on_profile(PetController.profile.to_view_dict(PetController.active_pet != null))
-	_sync_pet_visual()
+	var has := PetController.active_pet != null
+	var life := str(PetController.active_pet.life_state) if has else ""
+	_empty_panel.visible = not has
+	_death_panel.visible = has and life == "DEAD" and not PetController.active_pet.buried
+	_pet.visible = has
+	_on_profile(PetController.profile.to_view_dict(has))
+	_apply_day_night(str(TimeService.local_day_phase()))
 	_update_debug()
-
-
-func _apply_snap(snap: Dictionary) -> void:
-	var has_pet := not snap.is_empty() and str(snap.get("id", "")) != ""
-	var life := str(snap.get("life_state", ""))
-	_empty_panel.visible = not has_pet
-	_death_panel.visible = has_pet and life == "DEAD" and not bool(snap.get("buried", false))
-	_action_row.visible = has_pet and life != "DEAD"
-	_pet.visible = has_pet
-	if _status:
-		if has_pet:
-			_status.text = "%s (%s) · %s · %s" % [
-				str(snap.get("name", "?")),
-				str(snap.get("species_display", "")),
-				life,
-				str(snap.get("status_message", "")),
-			]
-		else:
-			_status.text = "No pet — adopt to begin real-time care simulation."
-	for k in _meters:
-		_meters[k].value = float(snap.get(k, 0.0)) if has_pet else 0.0
-	_apply_day_night(str(snap.get("local_day_phase", TimeService.local_day_phase())))
-
-
-func _sync_pet_visual() -> void:
-	if _pet == null:
-		return
-	if PetController.active_pet == null:
-		return
-	_reload_pet_sprites()
-	if _director:
-		_director._sync_pet_mood_anim()
+	_apply_pet_condition_visual()
 
 
 func _apply_day_night(phase: String) -> void:
 	match phase:
 		"night":
-			_day_overlay.color = Color(0.05, 0.08, 0.25, 0.45)
+			_day_overlay.color = Color(0.05, 0.08, 0.28, 0.4)
 		"dusk":
-			_day_overlay.color = Color(0.35, 0.15, 0.25, 0.28)
+			_day_overlay.color = Color(0.4, 0.15, 0.25, 0.22)
 		"dawn":
-			_day_overlay.color = Color(0.9, 0.55, 0.35, 0.18)
+			_day_overlay.color = Color(0.95, 0.55, 0.3, 0.12)
 		_:
-			_day_overlay.color = Color(1, 1, 1, 0.0)
+			_day_overlay.color = Color(0, 0, 0, 0)
 
 
 func _update_debug() -> void:
-	if _debug == null or not _debug_visible:
+	if not _debug_visible or _debug == null:
 		return
-	var lines: PackedStringArray = []
-	lines.append("DEBUG · offset=%.0f · phase=%s" % [TimeService.debug_offset_sec, TimeService.local_day_phase()])
 	if PetController.active_pet:
 		var p = PetController.active_pet
-		lines.append(
-			"%s %s H=%.0f E=%.0f A=%.0f Y=%.0f hold=%.0f"
-			% [p.name, str(p.life_state), p.hunger, p.energy, p.happiness, p.hygiene, p.zero_hold_sec]
-		)
-	_debug.text = "\n".join(lines)
+		_debug.text = "%s %s H=%.0f hold=%.0f cond=%s" % [
+			p.name, str(p.life_state), p.hunger, p.zero_hold_sec, _condition_from_pet(p)
+		]
+	else:
+		_debug.text = "no pet"

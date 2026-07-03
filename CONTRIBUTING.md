@@ -1,0 +1,40 @@
+# Contributing
+
+This is a **private** project. Work happens via **pull requests** only — no direct pushes to `main` for feature work once branch protection is enabled.
+
+## Branching
+
+- `main` — protected, always green, shippable after each merged PR in the plan.
+- Feature branches: `pr-NN-short-slug` or `feat/short-slug` matching the design PR plan.
+
+## Pull request requirements (non-negotiable)
+
+Every PR **must** include:
+
+1. **Description** — what changed, why, how to test, risk, design/PR plan reference.
+2. **Screenshots** — at least one image (or short clip as GIF/WebM). **Never omit.**
+   - UI PRs: in-game or editor captures of the new UI.
+   - Systems/sim PRs: terminal test output, debug overlay, or Godot remote/scene tree proving the change.
+   - Docs-only PRs: screenshot of rendered doc section or file tree is acceptable; still required.
+3. **CI green** — all required checks pass.
+4. **Human review** — owner merges only if checks are green **and** the PR looks good (description + screenshots reviewed).
+
+Use the GitHub PR template (auto-filled). Details: [`docs/PR_STANDARDS.md`](docs/PR_STANDARDS.md).
+
+## Local checks (when Godot exists)
+
+```bash
+# After project.godot exists — example
+godot --headless --path . -s res://tests/run_tests.gd
+```
+
+## Never do
+
+- Merge with red CI
+- Open a PR without a Screenshots section with real media
+- Force-push to `main`
+- Skip the design plan sequence without an explicit decision to re-order
+
+## Agent / automation note
+
+Agents implementing features **must** attach screenshots to every PR (capture via screenshot tool, Godot window, or CI artifact links pasted into the PR body). Forgetting screenshots is a process failure, not optional polish.

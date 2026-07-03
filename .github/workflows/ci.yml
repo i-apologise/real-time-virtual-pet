@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-body:
+    name: PR Body (description + screenshots)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch PR body
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}" \
+            --jq .body > /tmp/pr_body.md
+          echo "----- PR body (first 80 lines) -----"
+          head -n 80 /tmp/pr_body.md || true
+
+      - name: Validate description + screenshots
+        run: bash .github/scripts/check_pr_body.sh /tmp/pr_body.md
+
+  structure:
+    name: Repo structure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check required files
+        run: bash .github/scripts/check_structure.sh
+
+  godot-tests:
+    name: Godot tests
+    runs-on: ubuntu-latest
+    # Skip gracefully until project exists; still a green optional path early.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect project.godot
+        id: godot
+        run: |
+          if [[ -f project.godot ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No project.godot yet — Godot tests skipped (will become required once project bootstrapped)."
+          fi
+
+      - name: Setup Godot 4.3
+        if: steps.godot.outputs.present == 'true'
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.3.0
+          use-dotnet: false
+          include-templates: false
+
+      - name: Import project (headless)
+        if: steps.godot.outputs.present == 'true'
+        run: |
+          godot --headless --path . --import || true
+          # Second pass ensures import settles on some versions
+          godot --headless --path . --quit-after 1 || true
+
+      - name: Run unit tests
+        if: steps.godot.outputs.present == 'true'
+        run: |
+          set -euo pipefail
+          if [[ ! -f tests/run_tests.gd ]]; then
+            echo "::error::project.godot exists but tests/run_tests.gd is missing"
+            exit 1
+          fi
+          godot --headless --path . -s res://tests/run_tests.gd

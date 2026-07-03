@@ -162,6 +162,70 @@ func _build_actors() -> void:
 	_camera.position_smoothing_speed = 8.0
 
 
+func _reload_pet_sprites() -> void:
+	var sid := "blob"
+	if PetController.active_pet != null:
+		sid = String(PetController.active_pet.species_id)
+	_pet.is_pet = true
+	_pet.setup_frames(SpriteFactoryScr.pet_frames(sid), 2.0)
+	_pet.setup_collision(true)
+	_apply_pet_condition_visual()
+
+
+func _condition_from_pet(p) -> String:
+	if p == null:
+		return "healthy"
+	var life := str(p.life_state)
+	if life == "DEAD":
+		return "dead"
+	if life == "DYING" or p.hunger <= 0.0 or p.energy <= 5.0:
+		return "weak"
+	if life == "CRITICAL" or p.hunger < 20.0:
+		return "hungry"
+	if p.hunger < 40.0 or p.happiness < 30.0:
+		return "hungry"
+	return "healthy"
+
+
+func _apply_pet_condition_visual() -> void:
+	if _pet == null or PetController.active_pet == null:
+		return
+	var cond := _condition_from_pet(PetController.active_pet)
+	_pet.set_condition(cond)
+	match cond:
+		"dead":
+			_pet.play_anim(&"dead")
+		"weak":
+			_pet.play_anim(&"weak")
+		"hungry":
+			_pet.play_anim(&"hungry")
+		_:
+			if PetController.active_pet.is_sleeping():
+				_pet.play_anim(&"sleep")
+			elif PetController.active_pet.happiness >= 75.0:
+				_pet.play_anim(&"happy")
+			else:
+				_pet.play_anim(&"idle")
+
+
+func _wire_director() -> void:
+	_director = CareDirectorScr.new()
+	add_child(_director)
+	var spots := {
+		"feed": Vector2(270, 185),
+		"play": Vector2(275, 190),
+		"walk": Vector2(275, 190),
+		"clean": Vector2(280, 185),
+		"sleep": Vector2(290, 175),
+		"wake": Vector2(290, 175),
+	}
+	_director.setup(_human, _pet, spots)
+	_director.toast.connect(_show_toast)
+	_director.choreography_finished.connect(func(_a, _r):
+		_refresh_all()
+		_apply_pet_condition_visual()
+	)
+
 
 func _build_hud() -> void:
 	var layer := CanvasLayer.new()

@@ -28,6 +28,9 @@ Use the GitHub PR template (auto-filled). Details: [`docs/PR_STANDARDS.md`](docs
 godot --headless --path . -s res://tests/run_tests.gd
 ```
 
+
+> **GitHub Free + private repo note:** Classic branch protection / rulesets that *block* merges may require **GitHub Pro** (or a public repo). CI still runs on every PR and must be green before you merge. Until protection is available, treat red CI or missing screenshots as a hard **human** no-merge rule.
+
 ## Never do
 
 - Merge with red CI

@@ -26,6 +26,9 @@ See [Contributing](CONTRIBUTING.md) and [PR standards](docs/PR_STANDARDS.md).
 
 ## CI
 
+> **GitHub Free + private repo note:** Classic branch protection / rulesets that *block* merges may require **GitHub Pro** (or a public repo). CI still runs on every PR and must be green before you merge. Until protection is available, treat red CI or missing screenshots as a hard **human** no-merge rule.
+
+
 GitHub Actions on every PR / push to `main`:
 
 - PR body: description + screenshots checklist

@@ -81,6 +81,9 @@ Local simulation of PR body check:
 
 ## Merge policy (owner)
 
+> **GitHub Free + private repo note:** Classic branch protection / rulesets that *block* merges may require **GitHub Pro** (or a public repo). CI still runs on every PR and must be green before you merge. Until protection is available, treat red CI or missing screenshots as a hard **human** no-merge rule.
+
+
 Merge **only if**:
 
 1. All required CI checks are **green**.

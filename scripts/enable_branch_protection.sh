@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Enable recommended branch protection on main (owner runs once).
+# Requires GitHub Pro (or public repo) for private repositories on free plan.
 set -euo pipefail
 
 REPO="${1:-}"
@@ -9,9 +10,9 @@ fi
 
 echo "Applying branch protection on ${REPO} branch main..."
 
-# contexts must match job `name:` fields in ci.yml
-gh api -X PUT "repos/${REPO}/branches/main/protection" \
-  --input - <<'JSON'
+set +e
+out="$(gh api -X PUT "repos/${REPO}/branches/main/protection" \
+  --input - 2>&1 <<'JSON'
 {
   "required_status_checks": {
     "strict": true,
@@ -33,6 +34,17 @@ gh api -X PUT "repos/${REPO}/branches/main/protection" \
   "required_conversation_resolution": true
 }
 JSON
+)"
+code=$?
+set -e
 
-echo "Done. PRs to main now require green checks (and conversation resolution)."
-echo "Note: PR Body check only runs on pull_request events — required contexts on push-only still need a PR to validate body."
+echo "${out}"
+if [[ ${code} -ne 0 ]]; then
+  echo ""
+  echo "Branch protection API failed (exit ${code})."
+  echo "On GitHub Free, private repos often cannot enable branch protection (needs Pro or public)."
+  echo "CI still runs on PRs — merge only when checks are green and screenshots look good."
+  exit "${code}"
+fi
+
+echo "Done. PRs to main require green checks."

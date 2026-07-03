@@ -1,10 +1,13 @@
-# Needs your review
+# Needs your review (merge when ready)
 
-## Open PRs
+GitHub usually does **not** notify you for PRs opened with your own token.
 
-- **PR #9** — feat: full sprite simulation — characters, animations, care choreography
-  https://github.com/i-apologise/real-time-virtual-pet/pull/9
+## Open now
 
-## Note
+- **PR #11** — fix: Pokemon Red-style lifelike 16x16 characters (readable sprites)
+  - https://github.com/i-apologise/real-time-virtual-pet/pull/11
+  - CI: **ALL GREEN** (PR Body, Repo structure, Godot tests)
+  - Mergeable: **yes**
+  - What: readable trainer + slime/puppy/owl; player & AI same size
 
-GitHub often will not notify you for PRs opened with your own account. Watch the repo or check this file / Pull requests list.
+Last updated: 2026-07-03T10:52Z UTC

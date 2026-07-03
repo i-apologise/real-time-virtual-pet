@@ -20,3 +20,5 @@
 | #5 | **C+D** Habitat + world | https://github.com/i-apologise/real-time-virtual-pet/pull/5 |
 | #7 | **E** 0.1.0 polish | https://github.com/i-apologise/real-time-virtual-pet/pull/7 |
 
+| 2026-07-03T10:52Z | Watchdog: open **PR #11** lifelike sprites. A–E + #9/#10 merged on main. No new feature work. Awaiting user merge of #11. |
+| 2026-07-03T10:52Z | Watchdog: **PR #11** CI green, mergeable. A–E complete on main. Awaiting user merge. |

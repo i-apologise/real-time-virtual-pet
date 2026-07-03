@@ -46,17 +46,19 @@ The template in `.github/PULL_REQUEST_TEMPLATE.md` must stay filled:
 
 ### Private repository image URLs (required)
 
-Do **not** use `https://raw.githubusercontent.com/...` in PR bodies for a **private** repo — browsers often fail to load them (no auth cookies on that host).
+GitHub’s PR markdown image proxy **cannot load images from a private repo** (`raw.githubusercontent.com` or `github.com/.../raw/...` both break in the PR description).
 
-**Use instead (same-site, works when logged into GitHub):**
+**Do one of these for every PR:**
+
+1. **Preferred for automation:** push screenshots to the public mirror repo [`rtvp-pr-assets`](https://github.com/i-apologise/rtvp-pr-assets) and embed:
 
 ```markdown
-![desc](https://github.com/OWNER/REPO/raw/BRANCH/path/to/image.png)
+![desc](https://raw.githubusercontent.com/i-apologise/rtvp-pr-assets/main/prN/your.png)
 ```
 
-Or upload/paste images in the GitHub web UI (preferred — `user-attachments` URLs).
+2. **Preferred for humans:** paste/drag images into the PR body on github.com (creates `user-attachments` URLs).
 
-After merge, prefer `raw/main/...` or paste-upload for long-lived links.
+3. Always also commit screenshots under `docs/pr-screenshots/` in the private repo for permanent history.
 
 
 Preferred:

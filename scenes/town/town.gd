@@ -1,6 +1,5 @@
 extends Node2D
-## Pokemon-style town: grass tiles, solid buildings, sprite human, AI walkers.
-## House front door → home. Backyard is NOT a separate town building — use house back door.
+## Town map: house, park, pet store. Solid bounds. Optional leashed pet escort.
 
 const SpriteFactoryScr = preload("res://src/gameplay/sprite_factory.gd")
 const AnimatedActorScr = preload("res://src/gameplay/animated_actor.gd")
@@ -8,9 +7,13 @@ const AmbientWalkerScr = preload("res://src/gameplay/ambient_walker.gd")
 
 const POI_RADIUS := 42.0
 const LAYER_WORLD := 1
+const WORLD_BOUNDS := Rect2(24, 24, 592, 352)
 
 var _human: CharacterBody2D
+var _pet: CharacterBody2D
+var _leash: Line2D
 var _label: Label
+var _toast: Label
 var _world: Node2D
 var _pois: Array = []
 
@@ -19,6 +22,7 @@ func _ready() -> void:
 	y_sort_enabled = true
 	_build_world()
 	_apply_spawn()
+	_maybe_spawn_escort_pet()
 
 
 func _apply_spawn() -> void:
@@ -30,8 +34,11 @@ func _apply_spawn() -> void:
 			_human.position = Vector2(232, 248)
 		"from_store":
 			_human.position = Vector2(396, 190)
+		"from_park":
+			_human.position = Vector2(120, 190)
 		_:
 			_human.position = Vector2(232, 248)
+	_human.set_world_bounds(WORLD_BOUNDS)
 
 
 func _tile_rect(area: Rect2, kind: String) -> void:
@@ -73,7 +80,6 @@ func _solid(rect: Rect2, color: Color, title: String = "", scene_id: String = ""
 	roof.color = color.darkened(0.22)
 	roof.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	body.add_child(roof)
-	# door stripe
 	var door := ColorRect.new()
 	door.size = Vector2(14, 18)
 	door.position = Vector2(-7, rect.size.y * 0.5 - 18)
@@ -83,7 +89,7 @@ func _solid(rect: Rect2, color: Color, title: String = "", scene_id: String = ""
 	if title != "":
 		var lab := Label.new()
 		lab.text = title
-		lab.position = Vector2(-rect.size.x * 0.4, -rect.size.y * 0.5 - 26)
+		lab.position = Vector2(-rect.size.x * 0.45, -rect.size.y * 0.5 - 26)
 		lab.add_theme_font_size_override("font_size", 11)
 		lab.add_theme_color_override("font_color", Color.WHITE)
 		body.add_child(lab)
@@ -104,33 +110,26 @@ func _build_world() -> void:
 
 	_tile_rect(Rect2(0, 0, 640, 400), "grass")
 	_tile_rect(Rect2(40, 220, 560, 48), "path")
-	# path from house side toward where backyard "would be" (hint only)
-	_tile_rect(Rect2(250, 160, 32, 64), "path")
+	_tile_rect(Rect2(100, 150, 40, 80), "path")
+	_tile_rect(Rect2(360, 160, 40, 70), "path")
 
-	# Home (front door only — backyard is via house interior south door)
 	_solid(Rect2(200, 150, 72, 56), Color("C48C5C"), "Your House", "habitat", "from_town")
-	# Pet store
-	_solid(Rect2(360, 100, 72, 56), Color("5B8DEE"), "Pet Store", "pet_store", "from_town")
-	# Park — scenic only (no wrong teleport)
-	_solid(Rect2(80, 100, 80, 48), Color("3DAA55"), "Park", "", "")
-	# Neighbor houses (no enter)
-	_solid(Rect2(40, 240, 56, 48), Color("8E6E7A"), "Neighbor", "", "")
-	_solid(Rect2(540, 90, 56, 48), Color("8E6E7A"), "Neighbor", "", "")
+	_solid(Rect2(360, 100, 80, 56), Color("5B8DEE"), "Pet Store", "pet_store", "from_town")
+	_solid(Rect2(70, 90, 96, 64), Color("3DAA55"), "Pet Park", "park", "from_town")
+	_solid(Rect2(520, 240, 56, 48), Color("8E6E7A"), "Neighbor", "", "")
 
-	# Sign near house: backyard via home
 	var sign := Label.new()
-	sign.text = "Backyard → go inside house, south door"
-	sign.position = Vector2(180, 220)
+	sign.text = "Backyard → inside house, south door"
+	sign.position = Vector2(170, 220)
 	sign.add_theme_font_size_override("font_size", 10)
 	sign.add_theme_color_override("font_color", Color(0.95, 0.95, 0.85))
-	sign.z_index = -10
 	_world.add_child(sign)
 
-	# Map bounds
-	_solid(Rect2(-16, 0, 16, 400), Color(0, 0, 0, 0))
-	_solid(Rect2(640, 0, 16, 400), Color(0, 0, 0, 0))
-	_solid(Rect2(0, -16, 640, 16), Color(0, 0, 0, 0))
-	_solid(Rect2(0, 400, 640, 16), Color(0, 0, 0, 0))
+	# Thick world walls (prevent walking off map)
+	_solid(Rect2(0, 0, 640, 18), Color("2A4A20"))
+	_solid(Rect2(0, 382, 640, 18), Color("2A4A20"))
+	_solid(Rect2(0, 0, 18, 400), Color("2A4A20"))
+	_solid(Rect2(622, 0, 18, 400), Color("2A4A20"))
 
 	_human = AnimatedActorScr.new()
 	_human.is_player_controlled = true
@@ -140,6 +139,7 @@ func _build_world() -> void:
 	_world.add_child(_human)
 	_human.setup_frames(SpriteFactoryScr.human_frames(), 2.0)
 	_human.setup_collision(false)
+	_human.set_world_bounds(WORLD_BOUNDS)
 
 	var cam := Camera2D.new()
 	cam.zoom = Vector2(2.3, 2.3)
@@ -152,12 +152,19 @@ func _build_world() -> void:
 	cam.limit_right = 640
 	cam.limit_bottom = 400
 
+	_leash = Line2D.new()
+	_leash.width = 2.8
+	_leash.default_color = Color("6D4C41")
+	_leash.visible = false
+	_leash.z_index = 80
+	_world.add_child(_leash)
+
 	var ai1 = AmbientWalkerScr.new()
 	_world.add_child(ai1)
 	ai1.setup(Vector2(60, 270), Vector2(180, 270), 40.0)
 	var ai2 = AmbientWalkerScr.new()
 	_world.add_child(ai2)
-	ai2.setup(Vector2(520, 160), Vector2(600, 200), 35.0)
+	ai2.setup(Vector2(480, 200), Vector2(580, 280), 35.0)
 
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -165,13 +172,64 @@ func _build_world() -> void:
 	_label.position = Vector2(8, 6)
 	_label.add_theme_font_size_override("font_size", 12)
 	_label.add_theme_color_override("font_color", Color.WHITE)
-	_label.text = "Town — WASD · doorstep + E · backyard is through Your House"
+	_label.text = "Town — WASD · E at doorsteps · Park / Store / House"
 	layer.add_child(_label)
+	_toast = Label.new()
+	_toast.position = Vector2(8, 28)
+	_toast.add_theme_font_size_override("font_size", 12)
+	_toast.modulate = Color(1, 1, 0.65)
+	layer.add_child(_toast)
 
 
-func _process(_delta: float) -> void:
+func _maybe_spawn_escort_pet() -> void:
+	if not PetController.escort_active:
+		return
+	if PetController.active_pet == null or str(PetController.active_pet.life_state) == "DEAD":
+		PetController.escort_active = false
+		return
+	_pet = AnimatedActorScr.new()
+	_pet.is_pet = true
+	_pet.is_player_controlled = false
+	_pet.move_speed = 100.0
+	_pet.position = _human.position + Vector2(-22, 10)
+	_world.add_child(_pet)
+	var sid := String(PetController.active_pet.species_id)
+	_pet.setup_frames(SpriteFactoryScr.pet_frames(sid), 2.0)
+	_pet.setup_collision(true)
+	_pet.set_collision_enabled(false)
+	_pet.set_follow(_human, Vector2(-22, 10))
+	_pet.set_world_bounds(WORLD_BOUNDS)
+	_leash.visible = true
+	_toast.text = "Leashed walk — visit Park or go home · E near pet at home to finish"
+
+
+func _process(delta: float) -> void:
 	if _human == null:
 		return
+	if PetController.escort_active:
+		PetController.tick_escort(delta)
+		if _pet and _leash:
+			_leash.visible = true
+			_leash.points = PackedVector2Array([
+				_world.to_local(_human.global_position + Vector2(4, -10)),
+				_world.to_local(_pet.global_position + Vector2(0, -8)),
+			])
+		if Input.is_action_just_pressed("interact") and _pet:
+			if _human.global_position.distance_to(_pet.global_position) < 56.0:
+				if PetController.can_finish_escort():
+					var r: Dictionary = PetController.end_escort(true)
+					if _pet:
+						_pet.clear_follow()
+						_pet.queue_free()
+						_pet = null
+					_leash.visible = false
+					_toast.text = "Walk complete!" if r.get("ok", false) else "Walk ended"
+				else:
+					_toast.text = "Walk a bit longer… %.0fs" % maxf(
+						0.0, PetController.ESCORT_MIN_SEC - PetController.escort_elapsed_sec
+					)
+				return
+
 	var near := ""
 	var scene_id := ""
 	var spawn := ""
@@ -186,4 +244,9 @@ func _process(_delta: float) -> void:
 		if scene_id != "" and Input.is_action_just_pressed("interact"):
 			SceneRouter.go(scene_id, spawn)
 	else:
-		_label.text = "Town — doorsteps + E · House back door = backyard (inside home)"
+		if PetController.escort_active:
+			_label.text = "Town (leashed) — Park / House / Store · walk min remaining %.0fs" % maxf(
+				0.0, PetController.ESCORT_MIN_SEC - PetController.escort_elapsed_sec
+			)
+		else:
+			_label.text = "Town — doorsteps + E · House · Pet Park · Pet Store"

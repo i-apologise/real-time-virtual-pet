@@ -8,7 +8,7 @@ signal toast(message: String)
 signal timer_tick(seconds_left: float, total: float, label: String)
 signal timer_done
 
-enum State { IDLE, GATHERING, ACTING, LEASH }
+enum State { IDLE, GATHERING, ACTING, LEASH, ESCORT }
 
 var state: State = State.IDLE
 var human: CharacterBody2D
@@ -38,10 +38,21 @@ func setup(p_human: CharacterBody2D, p_pet: CharacterBody2D, spots: Dictionary =
 
 
 func is_busy() -> bool:
-	return state != State.IDLE
+	## ESCORT leaves player free (pet leashed); not "busy" for movement menus.
+	return state != State.IDLE and state != State.ESCORT
+
+
+func is_escorting() -> bool:
+	return state == State.ESCORT or PetController.escort_active
 
 
 func try_start_care(action: StringName) -> Dictionary:
+	if PetController.escort_active or state == State.ESCORT:
+		return {
+			"ok": false,
+			"reason": &"BUSY",
+			"message": "Already on a leash walk — E near pet to end it",
+		}
 	if state != State.IDLE:
 		return {"ok": false, "reason": &"BUSY", "message": "Still busy — wait a second"}
 	if human == null or pet == null or PetController.active_pet == null:
@@ -166,19 +177,69 @@ func _try_begin_main() -> void:
 
 
 func _begin_leash() -> void:
-	state = State.LEASH
+	## Free-roam leash: player controls human; pet sticks across rooms/town/park.
+	state = State.ESCORT
 	_elapsed = 0.0
-	_duration = 4.5
 	_leash_leg = 0
-	toast.emit("Leash walk!")
+	PetController.start_escort()
 	if pet.has_method("set_follow"):
 		pet.set_follow(human, Vector2(-22, 10))
+	if pet.has_method("set_collision_enabled"):
+		pet.set_collision_enabled(false)
 	if human.has_method("set_acting"):
 		human.set_acting(false)
-	# Keep busy but allow walk_to (cancel_motion=false)
-	human.set_busy(true, false)
-	human.walk_to(care_spots.get("walk_a", Vector2(180, 230)) as Vector2)
-	timer_tick.emit(_duration, _duration, "Walk")
+	human.set_busy(false)
+	pet.set_busy(false, false)
+	toast.emit("Leashed! Take them outside (left door → Town/Park). E near pet to end walk.")
+	timer_tick.emit(float(PetController.ESCORT_MIN_SEC), float(PetController.ESCORT_MIN_SEC), "Walk min")
+	set_process(true)
+
+
+func try_finish_escort() -> Dictionary:
+	## Called by habitat/town/park when player ends the outdoor walk.
+	if not PetController.escort_active and state != State.ESCORT:
+		return {"ok": false, "reason": &"NOT_ESCORTING"}
+	if not PetController.can_finish_escort():
+		var left: float = maxf(0.0, PetController.ESCORT_MIN_SEC - PetController.escort_elapsed_sec)
+		toast.emit("Walk a bit longer… %.0fs" % left)
+		return {"ok": false, "reason": &"TOO_SHORT", "remaining": left}
+	# Drop leash visuals / follow
+	if pet and pet.has_method("clear_follow"):
+		pet.clear_follow()
+	if leash_line:
+		leash_line.visible = false
+	state = State.IDLE
+	set_process(false)
+	timer_done.emit()
+	var result: Dictionary = PetController.end_escort(true)
+	_sync_pet_mood()
+	if human:
+		human.set_busy(false)
+	if pet:
+		pet.set_busy(false)
+		if pet.has_method("set_collision_enabled"):
+			pet.set_collision_enabled(true)
+	if result.get("ok", false) or result.get("applied", false):
+		toast.emit("Walk complete! Pet is happier outside.")
+	else:
+		var reason := str(result.get("reason", ""))
+		if reason == "COOLDOWN":
+			toast.emit("Walk done (care still on cooldown)")
+		else:
+			toast.emit("Walk ended")
+	choreography_finished.emit(&"walk", result)
+	return result
+
+
+func resume_escort_visuals() -> void:
+	## After scene change while escort_active.
+	if not PetController.escort_active:
+		return
+	state = State.ESCORT
+	if pet and human and pet.has_method("set_follow"):
+		pet.set_follow(human, Vector2(-22, 10))
+		if pet.has_method("set_collision_enabled"):
+			pet.set_collision_enabled(false)
 	set_process(true)
 
 
@@ -234,24 +295,17 @@ func _process(delta: float) -> void:
 			_complete_care()
 		return
 
-	if state == State.LEASH:
+	if state == State.LEASH or state == State.ESCORT:
 		_elapsed += delta
+		PetController.tick_escort(delta)
 		_update_leash_visual()
-		timer_tick.emit(maxf(0.0, _duration - _elapsed), _duration, "Walk")
-		if _leash_leg == 0 and _elapsed >= 1.4:
-			_leash_leg = 1
-			human.walk_to(care_spots.get("walk_b", Vector2(360, 240)) as Vector2)
-		elif _leash_leg == 1 and _elapsed >= 2.8:
-			_leash_leg = 2
-			human.walk_to(care_spots.get("walk_home", Vector2(220, 200)) as Vector2)
-		if _elapsed >= _duration:
-			if pet.has_method("clear_follow"):
-				pet.clear_follow()
-			if leash_line:
-				leash_line.visible = false
-			set_process(false)
-			timer_done.emit()
-			_complete_care()
+		var need: float = float(PetController.ESCORT_MIN_SEC)
+		var left: float = maxf(0.0, need - PetController.escort_elapsed_sec)
+		if left > 0.0:
+			timer_tick.emit(left, need, "Walk min")
+		else:
+			timer_tick.emit(0.0, need, "E end walk")
+		# Free escort never auto-ends — player ends with E near pet
 		return
 
 

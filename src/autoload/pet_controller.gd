@@ -9,6 +9,34 @@ var _autosave_accum: float = 0.0
 var _booted: bool = false
 var last_catchup_result: CatchupResult = null
 var last_status: Dictionary = {"message": "", "priority": 0}
+## Outdoor leash walk: pet sticks to human across scenes until walk ends.
+var escort_active: bool = false
+var escort_elapsed_sec: float = 0.0
+const ESCORT_MIN_SEC := 10.0
+
+
+func start_escort() -> void:
+	escort_active = true
+	escort_elapsed_sec = 0.0
+
+
+func tick_escort(delta: float) -> void:
+	if escort_active:
+		escort_elapsed_sec += delta
+
+
+func can_finish_escort() -> bool:
+	return escort_active and escort_elapsed_sec >= ESCORT_MIN_SEC
+
+
+func end_escort(apply_walk_care: bool = true) -> Dictionary:
+	## Clears escort. Optionally applies WALK care reward once.
+	escort_active = false
+	var result := {"ok": true, "applied": false, "reason": &""}
+	if apply_walk_care and active_pet != null and str(active_pet.life_state) != "DEAD":
+		result = request_care(&"walk")
+		result["applied"] = bool(result.get("ok", false))
+	return result
 
 
 func _ready() -> void:

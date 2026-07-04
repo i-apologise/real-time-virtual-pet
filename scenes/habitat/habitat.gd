@@ -236,6 +236,7 @@ func _build_actors() -> void:
 	_world.add_child(_human)
 	_human.setup_frames(SpriteFactoryScr.human_frames(), 2.0)  # same scale as town AI
 	_human.setup_collision(false)
+	_human.set_world_bounds(Rect2(22, 40, 436, 250))
 
 	_pet = AnimatedActorScr.new()
 	_pet.is_player_controlled = false
@@ -245,6 +246,7 @@ func _build_actors() -> void:
 	_world.add_child(_pet)
 	_reload_pet_sprites()
 	_pet.setup_collision(true)
+	_pet.set_world_bounds(Rect2(22, 40, 436, 250))
 
 	# Leash visual (updated by CareDirector)
 	var leash := Line2D.new()
@@ -353,6 +355,11 @@ func _wire_director() -> void:
 		_refresh_all()
 		_apply_pet_condition_visual()
 	)
+	# Resume outdoor leash after town/park visit
+	if PetController.escort_active and _pet and str(PetController.active_pet.life_state if PetController.active_pet else "") != "DEAD":
+		_pet.visible = true
+		_director.resume_escort_visuals()
+		_show_toast("Still on leash — E near pet when ready to end walk")
 
 
 func _style_panel_light() -> StyleBoxFlat:
@@ -762,10 +769,17 @@ func _process(delta: float) -> void:
 		if _care_menu_open:
 			_confirm_care_selection()
 			return
+		# End outdoor leash walk near pet
+		if PetController.escort_active and _near_pet and _director:
+			_director.try_finish_escort()
+			return
 		if _at_door(DOOR_TOWN):
 			SceneRouter.go("town", "from_house")
 			return
 		if _at_door(DOOR_YARD):
+			if PetController.escort_active:
+				_show_toast("Finish the walk first (E near pet) — or take them to Town")
+				return
 			SceneRouter.go("graveyard", "from_house")
 			return
 		if _near_pet and PetController.active_pet != null and str(PetController.active_pet.life_state) != "DEAD":
@@ -786,6 +800,9 @@ func _close_care_menu() -> void:
 func _open_care_menu() -> void:
 	if not _near_pet or PetController.active_pet == null:
 		_show_toast("Get closer to your pet, then press E")
+		return
+	if PetController.escort_active:
+		_show_toast("On a walk — E near pet to end leash (or keep exploring town/park)")
 		return
 	var life := str(PetController.active_pet.life_state)
 	if life == "DEAD":

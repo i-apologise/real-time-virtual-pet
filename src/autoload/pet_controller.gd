@@ -350,7 +350,14 @@ func _save_atomic() -> void:
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
-		on_focus_resume()
-	elif what == NOTIFICATION_WM_CLOSE_REQUEST:
-		_save_atomic()
+	## Single handler: resume catch-up on focus; flush save on quit/background so sleep persists.
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_IN or what == NOTIFICATION_APPLICATION_FOCUS_IN:
+		if _booted:
+			on_focus_resume()
+	elif (
+		what == NOTIFICATION_WM_CLOSE_REQUEST
+		or what == NOTIFICATION_APPLICATION_PAUSED
+		or what == NOTIFICATION_APPLICATION_FOCUS_OUT
+	):
+		if _booted:
+			_save_atomic()

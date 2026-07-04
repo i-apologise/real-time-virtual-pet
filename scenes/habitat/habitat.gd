@@ -941,7 +941,7 @@ func _place_care_menu() -> void:
 func _update_zzz() -> void:
 	if _zzz == null or _pet == null:
 		return
-	var sleeping := (
+	var sleeping: bool = (
 		PetController.active_pet != null
 		and PetController.active_pet.is_sleeping()
 		and str(PetController.active_pet.life_state) != "DEAD"

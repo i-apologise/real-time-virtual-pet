@@ -22,6 +22,9 @@ const ENERGY_SLEEP_REGEN_PER_HOUR := 12.0
 const SLEEP_HUNGER_MULT := 0.5
 const SLEEP_HAPPINESS_MULT := 0.5
 const AUTO_WAKE_ENERGY := 95.0
+## Must sleep at least this long (wall-clock) before energy-based auto-wake.
+## Fixes "put to bed while energy high → reopen game already awake".
+const MIN_SLEEP_SEC := 1800.0  # 30 minutes
 const MAX_SLEEP_SEC := 36000.0  # 10 h
 
 const FEED_HUNGER_DELTA := 30.0

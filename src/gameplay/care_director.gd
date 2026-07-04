@@ -47,7 +47,10 @@ func is_escorting() -> bool:
 
 
 func try_start_care(action: StringName) -> Dictionary:
-	if PetController.escort_active or state == State.ESCORT:
+	if (
+		(PetController != null and PetController.escort_active)
+		or state == State.ESCORT
+	):
 		return {
 			"ok": false,
 			"reason": &"BUSY",

@@ -68,6 +68,16 @@ var _care_timer_bar: ProgressBar
 var _zzz: Label
 var _zzz_t: float = 0.0
 
+# Mood / care emote bubble (bob + fade; temporary — not permanent like Zzz)
+var _emote: Label
+var _emote_ttl: float = 0.0
+var _emote_passive_cd: float = 0.0
+const EMOTE_DURATION := 2.6
+const EMOTE_PASSIVE_CD := 7.5
+
+# Care juice sparks (lightweight ColorRect bursts on successful care)
+var _juice_sparks: Array = []  # {node, vel, life, max_life}
+
 
 # Door zones (world space)
 const DOOR_TOWN := Rect2(0, 210, 36, 56)       # left wall → town
@@ -365,9 +375,15 @@ func _wire_director() -> void:
 		_hide_care_timer()
 		_refresh_all()
 		_apply_pet_condition_visual()
+		var ok := bool(r.get("ok", false)) or bool(r.get("applied", false))
 		var audio := get_node_or_null("/root/AudioService")
 		if audio and audio.has_method("play_care"):
-			audio.play_care(a, bool(r.get("ok", false)) or bool(r.get("applied", false)))
+			audio.play_care(a, ok)
+		if ok:
+			_spawn_care_juice(String(a))
+			_show_care_success_emote(String(a))
+		else:
+			_show_emote("…", Color(0.65, 0.62, 0.7))
 	)
 	# Resume outdoor leash after town/park visit
 	if PetController.escort_active and _pet and str(PetController.active_pet.life_state if PetController.active_pet else "") != "DEAD":
@@ -562,6 +578,18 @@ func _build_hud() -> void:
 	_zzz.add_theme_constant_override("outline_size", 4)
 	_zzz.z_index = 200
 	_world.add_child(_zzz)
+
+	# Temporary mood / care emote (heart, hungry, sad…)
+	_emote = Label.new()
+	_emote.text = ""
+	_emote.visible = false
+	_emote.add_theme_font_size_override("font_size", 16)
+	_emote.add_theme_color_override("font_color", Color(1.0, 0.45, 0.55))
+	_emote.add_theme_color_override("font_outline_color", Color(0.08, 0.05, 0.08))
+	_emote.add_theme_constant_override("outline_size", 4)
+	_emote.z_index = 210
+	_emote.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_world.add_child(_emote)
 
 	# Nav shortcuts (doors still preferred)
 	var nav := HBoxContainer.new()
@@ -837,6 +865,162 @@ func _update_zzz() -> void:
 	_zzz.text = ["Z", "Zz", "Zzz"][phase]
 
 
+func _show_emote(text: String, color: Color = Color(1.0, 0.45, 0.55)) -> void:
+	if _emote == null:
+		return
+	_emote.text = text
+	_emote.add_theme_color_override("font_color", color)
+	_emote.modulate = Color(1, 1, 1, 1)
+	_emote.visible = true
+	_emote_ttl = EMOTE_DURATION
+	_emote_passive_cd = EMOTE_PASSIVE_CD
+
+
+func _show_care_success_emote(action: String) -> void:
+	match action:
+		"feed":
+			_show_emote("♥", Color(1.0, 0.35, 0.48))
+		"play":
+			_show_emote("★", Color(1.0, 0.85, 0.25))
+		"clean":
+			_show_emote("✦", Color(0.55, 0.85, 1.0))
+		"walk":
+			_show_emote("♪", Color(0.55, 0.9, 0.55))
+		"sleep":
+			# Zzz label already handles sleeping; brief tuck-in heart
+			_show_emote("Zzz♥", Color(0.65, 0.8, 1.0))
+		"wake":
+			_show_emote("!", Color(1.0, 0.92, 0.4))
+		_:
+			_show_emote("♥", Color(1.0, 0.5, 0.6))
+
+
+func _update_emote(delta: float) -> void:
+	if _emote == null:
+		return
+	if _emote_ttl > 0.0:
+		_emote_ttl -= delta
+		var t := 1.0 - clampf(_emote_ttl / EMOTE_DURATION, 0.0, 1.0)
+		# Rise slightly, bob, fade in last third
+		var rise := -t * 14.0
+		var bob := sin(_zzz_t * 5.0) * 2.5
+		var alpha := 1.0
+		if _emote_ttl < 0.9:
+			alpha = clampf(_emote_ttl / 0.9, 0.0, 1.0)
+		_emote.modulate.a = alpha
+		if _pet and _pet.visible:
+			_emote.global_position = _pet.global_position + Vector2(-12, -52.0 + rise + bob)
+		if _emote_ttl <= 0.0:
+			_emote.visible = false
+			_emote.text = ""
+	elif _emote.visible:
+		_emote.visible = false
+
+	# Passive needy mood emotes when no care emote is showing
+	if _emote_passive_cd > 0.0:
+		_emote_passive_cd -= delta
+	_try_passive_mood_emote()
+
+
+func _try_passive_mood_emote() -> void:
+	if _emote_ttl > 0.0 or _emote_passive_cd > 0.0:
+		return
+	if _pet == null or not _pet.visible or PetController.active_pet == null:
+		return
+	var p = PetController.active_pet
+	if str(p.life_state) == "DEAD":
+		return
+	if p.is_sleeping():
+		return  # Zzz owns sleep presentation
+	if _director and _director.is_busy():
+		return
+	# Needy reads first
+	if p.hunger < 28.0:
+		_show_emote("hungry…", Color(1.0, 0.72, 0.35))
+		return
+	if p.happiness < 28.0 or p.life_state == LifeState.CRITICAL or p.life_state == LifeState.DYING:
+		_show_emote("sad…", Color(0.7, 0.72, 0.9))
+		return
+	if p.hygiene < 22.0:
+		_show_emote("ew…", Color(0.75, 0.85, 0.55))
+		return
+	if p.energy < 22.0:
+		_show_emote("tired…", Color(0.75, 0.8, 1.0))
+		return
+
+
+func _spawn_care_juice(action: String) -> void:
+	## Lightweight sparkles around the pet on successful care (no GPUParticles dependency).
+	if _pet == null or _world == null:
+		return
+	var origin: Vector2 = _pet.global_position + Vector2(0, -18)
+	var base_col := Color(1.0, 0.9, 0.45, 0.95)
+	match action:
+		"feed":
+			base_col = Color(1.0, 0.55, 0.35, 0.95)
+		"play":
+			base_col = Color(1.0, 0.85, 0.3, 0.95)
+		"clean":
+			base_col = Color(0.55, 0.85, 1.0, 0.95)
+		"walk":
+			base_col = Color(0.55, 0.95, 0.55, 0.95)
+		"sleep":
+			base_col = Color(0.7, 0.8, 1.0, 0.9)
+		"wake":
+			base_col = Color(1.0, 0.95, 0.55, 0.95)
+	var n := 10
+	for i in n:
+		var spark := ColorRect.new()
+		var sz := 3.0 + float(i % 3)
+		spark.size = Vector2(sz, sz)
+		spark.color = base_col
+		spark.z_index = 190
+		# Alternate a few "heart-ish" larger pixels for feed
+		if action == "feed" and i % 3 == 0:
+			spark.size = Vector2(4, 4)
+			spark.color = Color(1.0, 0.35, 0.5, 0.95)
+		_world.add_child(spark)
+		spark.global_position = origin + Vector2(randf_range(-6, 6), randf_range(-4, 4))
+		var ang := randf() * TAU
+		var speed := randf_range(28.0, 72.0)
+		var life := randf_range(0.45, 0.85)
+		_juice_sparks.append({
+			"node": spark,
+			"vel": Vector2(cos(ang), sin(ang) - 0.55) * speed,
+			"life": life,
+			"max_life": life,
+		})
+
+
+func _update_care_juice(delta: float) -> void:
+	if _juice_sparks.is_empty():
+		return
+	var i := 0
+	while i < _juice_sparks.size():
+		var s: Dictionary = _juice_sparks[i]
+		var node: ColorRect = s.get("node") as ColorRect
+		var life: float = float(s.get("life", 0.0)) - delta
+		if node == null or not is_instance_valid(node) or life <= 0.0:
+			if node and is_instance_valid(node):
+				node.queue_free()
+			_juice_sparks.remove_at(i)
+			continue
+		var vel: Vector2 = s.get("vel", Vector2.ZERO) as Vector2
+		# Gravity + drag
+		vel.y += 55.0 * delta
+		vel *= 1.0 - 0.35 * delta
+		s["vel"] = vel
+		s["life"] = life
+		node.global_position += vel * delta
+		var max_life: float = maxf(0.001, float(s.get("max_life", 0.6)))
+		var a := clampf(life / max_life, 0.0, 1.0)
+		var c := node.color
+		c.a = a * 0.95
+		node.color = c
+		_juice_sparks[i] = s
+		i += 1
+
+
 func _at_door(rect: Rect2) -> bool:
 	if _human == null:
 		return false
@@ -853,6 +1037,8 @@ func _process(delta: float) -> void:
 			_hide_session_banner()
 	_update_near_pet_ui()
 	_update_zzz()
+	_update_emote(delta)
+	_update_care_juice(delta)
 	_place_stats_panel()
 	if _care_menu_open:
 		_place_care_menu()

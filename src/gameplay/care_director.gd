@@ -256,6 +256,10 @@ func _begin_timed_action() -> void:
 	var anim := _action_to_anim(_action)
 	human.play_anim(anim)
 	_play_pet_reaction(_action)
+	# Soft SFX at act start (finish plays full care_ok / action stinger in habitat)
+	var audio := get_node_or_null("/root/AudioService")
+	if audio and audio.has_method("play_care_start"):
+		audio.play_care_start(_action)
 	# Show full timer immediately
 	timer_tick.emit(_duration, _duration, str(_action).capitalize())
 	set_process(true)

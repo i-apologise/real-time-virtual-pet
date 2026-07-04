@@ -14,6 +14,34 @@ A **Tamagotchi-style** life sim in **Godot 4**: you play an **invincible human**
 
 ---
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/readme-screenshots/01-home.png" alt="Home habitat with pet" width="720" />
+</p>
+
+**Home** — pixel house, pet, need meters (top-right), care staging (bed / bath / bowl).
+
+| Home · CARE menu | Leash walk (timer) |
+|:---:|:---:|
+| <img src="docs/readme-screenshots/02-care-menu.png" alt="CARE menu open" width="360" /> | <img src="docs/readme-screenshots/03-leash-walk.png" alt="Leash walk in home" width="360" /> |
+
+| Town | Pet Park |
+|:---:|:---:|
+| <img src="docs/readme-screenshots/04-town.png" alt="Town map" width="360" /> | <img src="docs/readme-screenshots/05-park.png" alt="Pet park" width="360" /> |
+
+| Pet Store | Backyard graveyard |
+|:---:|:---:|
+| <img src="docs/readme-screenshots/06-pet-store.png" alt="Pet store interior" width="360" /> | <img src="docs/readme-screenshots/07-backyard.png" alt="Backyard grave plot" width="360" /> |
+
+<p align="center">
+  <img src="docs/readme-screenshots/08-need-meters.png" alt="Need meters with ETAs" width="480" />
+  <br />
+  <em>Need meters with numbers and time-until (hungry / sleepy / …)</em>
+</p>
+
+---
+
 ## Quick start
 
 1. Install **Godot 4.7** (or 4.3+).
@@ -342,4 +370,4 @@ Not while one is **living**. After death **and** burial, adopt again.
 
 ## License
 
-Private project (TBD). Keep assets and evidence in-repo; do not publish private game assets to public hosts unless asked.
+TBD (source and assets in this repository). Default assumption: all rights reserved until a license file is added.

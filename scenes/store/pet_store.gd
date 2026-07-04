@@ -1,122 +1,411 @@
-extends Control
-## Pet Store: species cards + adopt. First-time: primary onboarding step.
+extends Node2D
+## Walkable pet store: reception desk, clerk, species pens, adopt at counter.
+
+const SpriteFactoryScr = preload("res://src/gameplay/sprite_factory.gd")
+const AnimatedActorScr = preload("res://src/gameplay/animated_actor.gd")
+
+const LAYER_WORLD := 1
+const WORLD_BOUNDS := Rect2(28, 36, 584, 328)
+const EXIT_DOOR := Rect2(300, 360, 48, 36)
+const RECEPTION_ZONE := Rect2(250, 100, 140, 70)
+const PEN_RADIUS := 48.0
+
+var _human: CharacterBody2D
+var _world: Node2D
+var _label: Label
+var _toast: Label
+var _camera: Camera2D
+
+# Pens: {pos, species_id, display, actor}
+var _pens: Array = []
+var _near_pen: Dictionary = {}
+var _near_reception: bool = false
+
+# Adopt UI overlay
+var _ui_layer: CanvasLayer
+var _adopt_panel: PanelContainer
+var _name_edit: LineEdit
+var _adopt_species: StringName = &""
+var _adopt_title: Label
+var _blocked_label: Label
 
 
 func _ready() -> void:
-	set_anchors_preset(PRESET_FULL_RECT)
-	var bg := ColorRect.new()
-	bg.color = Color("1E2A32")
-	bg.set_anchors_preset(PRESET_FULL_RECT)
-	add_child(bg)
-
-	var root := VBoxContainer.new()
-	root.set_anchors_preset(PRESET_FULL_RECT)
-	root.add_theme_constant_override("separation", 12)
-	var margin := MarginContainer.new()
-	margin.set_anchors_preset(PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 24)
-	margin.add_theme_constant_override("margin_right", 24)
-	margin.add_theme_constant_override("margin_top", 20)
-	margin.add_theme_constant_override("margin_bottom", 20)
-	add_child(margin)
-	margin.add_child(root)
-
-	var top := HBoxContainer.new()
-	root.add_child(top)
-	var has_pet := PetController.active_pet != null
-	if has_pet:
-		var back := Button.new()
-		back.text = "Back"
-		back.pressed.connect(func(): SceneRouter.go("town", "from_store"))
-		top.add_child(back)
-	var title := Label.new()
-	title.text = "Adopt your first pet" if not has_pet else "Pet Store — choose a companion"
-	title.add_theme_font_size_override("font_size", 22)
-	title.add_theme_color_override("font_color", Color("F0F8E8"))
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(title)
-
-	if not has_pet:
-		var intro := Label.new()
-		intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		intro.add_theme_color_override("font_color", Color("B0D0B8"))
-		intro.text = "Pick a species and give them a name (2–16 letters). Needs run in real time — even when you're away."
-		root.add_child(intro)
-	elif has_pet:
-		var warn := Label.new()
-		warn.add_theme_color_override("font_color", Color("F0C0A0"))
-		warn.text = "You already have a living pet. You can only adopt again after burial if they pass away."
-		root.add_child(warn)
-
-	var cards := HBoxContainer.new()
-	cards.add_theme_constant_override("separation", 16)
-	cards.alignment = BoxContainer.ALIGNMENT_CENTER
-	root.add_child(cards)
-	for sid in SpeciesCatalog.list_ids():
-		cards.add_child(_make_card(sid, has_pet))
+	y_sort_enabled = true
+	_build_store()
+	_build_ui()
+	_apply_spawn()
 
 
-func _make_card(species_id: StringName, has_pet: bool) -> PanelContainer:
+func _apply_spawn() -> void:
+	var _spawn := SceneRouter.take_spawn("default")
+	if _human:
+		_human.position = Vector2(320, 340)
+		_human.set_world_bounds(WORLD_BOUNDS)
+
+
+func _tile(area: Rect2, kind: String) -> void:
+	var tex: Texture2D = SpriteFactoryScr.make_tile(kind)
+	var y := int(area.position.y)
+	while y < int(area.end.y):
+		var x := int(area.position.x)
+		while x < int(area.end.x):
+			var spr := Sprite2D.new()
+			spr.texture = tex
+			spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			spr.position = Vector2(x + 8, y + 8)
+			spr.z_index = -200
+			_world.add_child(spr)
+			x += 16
+		y += 16
+
+
+func _solid(rect: Rect2, color: Color) -> void:
+	var body := StaticBody2D.new()
+	body.position = rect.position + rect.size * 0.5
+	body.collision_layer = LAYER_WORLD
+	body.collision_mask = 0
+	body.z_index = int(body.position.y)
+	var shape := CollisionShape2D.new()
+	var rs := RectangleShape2D.new()
+	rs.size = rect.size
+	shape.shape = rs
+	body.add_child(shape)
+	var vis := ColorRect.new()
+	vis.size = rect.size
+	vis.position = -rect.size * 0.5
+	vis.color = color
+	vis.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	body.add_child(vis)
+	_world.add_child(body)
+
+
+func _decor(rect: Rect2, color: Color, z: int = -80) -> void:
+	var r := ColorRect.new()
+	r.color = color
+	r.size = rect.size
+	r.position = rect.position
+	r.z_index = z
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_world.add_child(r)
+
+
+func _label_at(text: String, pos: Vector2, size: int = 11, col: Color = Color(0.15, 0.12, 0.1)) -> void:
+	var lab := Label.new()
+	lab.text = text
+	lab.position = pos
+	lab.add_theme_font_size_override("font_size", size)
+	lab.add_theme_color_override("font_color", col)
+	lab.z_index = -40
+	_world.add_child(lab)
+
+
+func _build_store() -> void:
+	_world = Node2D.new()
+	_world.y_sort_enabled = true
+	add_child(_world)
+
+	# Floor: warm indoor tiles
+	_tile(Rect2(0, 0, 640, 400), "floor")
+	# Checkered aisle
+	for i in 8:
+		_decor(Rect2(300, 80 + i * 32, 40, 16), Color(0.92, 0.88, 0.8, 0.5), -95)
+
+	# Outer walls
+	_solid(Rect2(0, 0, 640, 28), Color("D8C8A8"))
+	_solid(Rect2(0, 372, 300, 28), Color("C8B898"))
+	_solid(Rect2(348, 372, 292, 28), Color("C8B898"))
+	_solid(Rect2(0, 0, 24, 400), Color("C8B898"))
+	_solid(Rect2(616, 0, 24, 400), Color("C8B898"))
+
+	# Front door mat
+	_decor(Rect2(300, 350, 48, 22), Color("5A3A22"), -70)
+	_decor(Rect2(306, 354, 36, 14), Color("8B5A2B"), -69)
+	_label_at("EXIT", Vector2(310, 368), 10, Color(0.9, 0.9, 0.85))
+
+	# Windows on north wall
+	_decor(Rect2(80, 32, 50, 28), Color("8EC8E8"), -88)
+	_decor(Rect2(510, 32, 50, 28), Color("8EC8E8"), -88)
+
+	# --- Reception desk (center-north) ---
+	_solid(Rect2(250, 70, 140, 28), Color("6D4C41"))  # desk top
+	_decor(Rect2(255, 98, 130, 36), Color("8D6E63"), -75)  # desk face
+	_decor(Rect2(300, 78, 40, 18), Color("ECEFF1"), -74)  # counter papers
+	_decor(Rect2(360, 82, 18, 12), Color("C62828"), -74)  # register
+	_label_at("RECEPTION", Vector2(288, 58), 12, Color(0.2, 0.15, 0.1))
+	_label_at("Adopt here · E", Vector2(278, 138), 10, Color(0.3, 0.25, 0.2))
+
+	# Clerk NPC (static actor)
+	var clerk := AnimatedActorScr.new()
+	clerk.is_player_controlled = false
+	clerk.position = Vector2(320, 78)
+	_world.add_child(clerk)
+	clerk.setup_frames(SpriteFactoryScr.human_frames(), 2.0)
+	clerk.setup_collision(false)
+	clerk.set_busy(true)
+	clerk.play_idle()
+	_label_at("Sam", Vector2(308, 48), 10, Color(0.15, 0.15, 0.2))
+
+	# Poster wall
+	_decor(Rect2(40, 80, 60, 80), Color("FFF8E1"), -92)
+	_label_at("Adopt\ndon't\nshop\nfast", Vector2(48, 90), 10, Color(0.4, 0.2, 0.15))
+
+	# --- Three species pens along sides ---
+	_add_pen(Vector2(110, 220), &"blob", "Cozy Blob pen", Color("A5D6A7"))
+	_add_pen(Vector2(320, 250), &"pup", "Needy Pup pen", Color("FFE0B2"))
+	_add_pen(Vector2(520, 220), &"owl", "Night Owl pen", Color("C5CAE9"))
+
+	# Shelves / food bags (decor)
+	_solid(Rect2(40, 300, 50, 40), Color("8D6E63"))
+	_label_at("Food", Vector2(48, 310), 10)
+	_solid(Rect2(550, 300, 50, 40), Color("8D6E63"))
+	_label_at("Toys", Vector2(558, 310), 10)
+
+	# Player
+	_human = AnimatedActorScr.new()
+	_human.is_player_controlled = true
+	_human.move_speed = 100.0
+	_human.position = Vector2(320, 340)
+	_world.add_child(_human)
+	_human.setup_frames(SpriteFactoryScr.human_frames(), 2.0)
+	_human.setup_collision(false)
+	_human.set_world_bounds(WORLD_BOUNDS)
+
+	_camera = Camera2D.new()
+	_camera.zoom = Vector2(2.15, 2.15)
+	_camera.position_smoothing_enabled = true
+	_human.add_child(_camera)
+	_camera.make_current()
+	_camera.limit_left = 0
+	_camera.limit_top = 0
+	_camera.limit_right = 640
+	_camera.limit_bottom = 400
+
+
+func _add_pen(center: Vector2, species_id: StringName, title: String, mat_color: Color) -> void:
+	# Pen floor mat
+	_decor(Rect2(center.x - 50, center.y - 40, 100, 80), mat_color, -93)
+	# Pen fence posts
+	_solid(Rect2(center.x - 52, center.y - 42, 8, 84), Color("5D4037"))
+	_solid(Rect2(center.x + 44, center.y - 42, 8, 84), Color("5D4037"))
+	_solid(Rect2(center.x - 52, center.y - 42, 104, 8), Color("5D4037"))
+	# Open front (south) so player approaches
+	_label_at(title, Vector2(center.x - 40, center.y - 58), 11, Color(0.12, 0.1, 0.08))
+	_label_at("E view", Vector2(center.x - 16, center.y + 36), 9, Color(0.25, 0.2, 0.15))
+
+	var actor := AnimatedActorScr.new()
+	actor.is_pet = true
+	actor.is_player_controlled = false
+	actor.position = center
+	_world.add_child(actor)
+	actor.setup_frames(SpriteFactoryScr.pet_frames(String(species_id)), 2.2)
+	actor.setup_collision(true)
+	actor.set_collision_enabled(false)
+	actor.set_busy(true)
+	actor.play_anim(&"happy" if String(species_id) != "owl" else &"idle")
+
 	var t: Dictionary = SpeciesCatalog.get_template(species_id)
-	var panel := PanelContainer.new()
+	_pens.append({
+		"pos": center,
+		"species_id": species_id,
+		"display": str(t.get("display_name", species_id)),
+		"actor": actor,
+		"blurb": str(t.get("risk_blurb", "")),
+		"feed": str(t.get("feed_need_label", "")),
+		"play": str(t.get("play_need_label", "")),
+		"hardy": str(t.get("hardiness_label", "")),
+	})
+
+
+func _style_panel() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.98, 0.96, 0.92)
+	sb.border_color = Color(0.15, 0.12, 0.1)
+	sb.set_border_width_all(3)
+	sb.set_corner_radius_all(8)
+	sb.content_margin_left = 14
+	sb.content_margin_right = 14
+	sb.content_margin_top = 12
+	sb.content_margin_bottom = 12
+	sb.shadow_size = 8
+	sb.shadow_color = Color(0, 0, 0, 0.35)
+	return sb
+
+
+func _build_ui() -> void:
+	_ui_layer = CanvasLayer.new()
+	_ui_layer.layer = 40
+	add_child(_ui_layer)
+
+	_label = Label.new()
+	_label.position = Vector2(8, 8)
+	_label.add_theme_font_size_override("font_size", 13)
+	_label.add_theme_color_override("font_color", Color.WHITE)
+	_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	_label.add_theme_constant_override("outline_size", 3)
+	_label.text = "Paw & Co. Pet Store — browse pens · adopt at Reception"
+	_ui_layer.add_child(_label)
+
+	_toast = Label.new()
+	_toast.position = Vector2(8, 30)
+	_toast.add_theme_font_size_override("font_size", 12)
+	_toast.modulate = Color(1, 0.95, 0.55)
+	_ui_layer.add_child(_toast)
+
+	var leave := Button.new()
+	leave.text = "Leave store"
+	leave.position = Vector2(8, 54)
+	leave.pressed.connect(func(): SceneRouter.go("town", "from_store"))
+	_ui_layer.add_child(leave)
+
+	# Adopt modal
+	_adopt_panel = PanelContainer.new()
+	_adopt_panel.visible = false
+	_adopt_panel.add_theme_stylebox_override("panel", _style_panel())
+	_adopt_panel.position = Vector2(360, 120)
+	_ui_layer.add_child(_adopt_panel)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
-	panel.add_child(v)
+	_adopt_panel.add_child(v)
+	_adopt_title = Label.new()
+	_adopt_title.add_theme_font_size_override("font_size", 18)
+	_adopt_title.add_theme_color_override("font_color", Color(0.1, 0.08, 0.06))
+	v.add_child(_adopt_title)
+	_blocked_label = Label.new()
+	_blocked_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_blocked_label.custom_minimum_size = Vector2(280, 0)
+	_blocked_label.add_theme_font_size_override("font_size", 12)
+	_blocked_label.add_theme_color_override("font_color", Color(0.35, 0.25, 0.15))
+	v.add_child(_blocked_label)
+	var name_row := HBoxContainer.new()
+	v.add_child(name_row)
+	var nl := Label.new()
+	nl.text = "Name:"
+	nl.add_theme_color_override("font_color", Color(0.1, 0.1, 0.1))
+	name_row.add_child(nl)
+	_name_edit = LineEdit.new()
+	_name_edit.custom_minimum_size = Vector2(160, 0)
+	_name_edit.placeholder_text = "2–16 letters"
+	name_row.add_child(_name_edit)
+	var row := HBoxContainer.new()
+	v.add_child(row)
+	var adopt_btn := Button.new()
+	adopt_btn.text = "Adopt companion"
+	adopt_btn.pressed.connect(_confirm_adopt)
+	row.add_child(adopt_btn)
+	var cancel := Button.new()
+	cancel.text = "Close"
+	cancel.pressed.connect(func(): _adopt_panel.visible = false)
+	row.add_child(cancel)
 
-	# Preview sprite
-	var tex_path := "res://assets/sprites/%s_idle_0.png" % (
-		"puppy" if str(species_id) == "pup" else ("owl" if str(species_id) == "owl" else "slime")
-	)
-	if ResourceLoader.exists(tex_path) or FileAccess.file_exists(tex_path):
-		var tex: Texture2D = load(tex_path) as Texture2D
-		if tex == null:
-			var img := Image.load_from_file(ProjectSettings.globalize_path(tex_path))
-			if img:
-				tex = ImageTexture.create_from_image(img)
-		if tex:
-			var spr := TextureRect.new()
-			spr.texture = tex
-			spr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			spr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			spr.custom_minimum_size = Vector2(96, 96)
-			spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-			v.add_child(spr)
+	call_deferred("_place_adopt_panel")
 
-	var name_l := Label.new()
-	name_l.text = str(t.get("display_name", species_id))
-	name_l.add_theme_font_size_override("font_size", 18)
-	name_l.add_theme_color_override("font_color", Color("F8F0E0"))
-	v.add_child(name_l)
-	var body := Label.new()
-	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body.custom_minimum_size = Vector2(200, 0)
-	body.add_theme_color_override("font_color", Color("D0D8D0"))
-	body.text = (
-		"Feed need: %s\nPlay need: %s\nHardiness: %s\n%s"
-		% [
-			str(t.get("feed_need_label", "")),
-			str(t.get("play_need_label", "")),
-			str(t.get("hardiness_label", "")),
-			str(t.get("risk_blurb", "")),
-		]
+
+func _place_adopt_panel() -> void:
+	if _adopt_panel == null:
+		return
+	var vp := get_viewport().get_visible_rect().size
+	_adopt_panel.position = Vector2(vp.x * 0.5 - 160, vp.y * 0.28)
+
+
+func _living_pet_blocks() -> bool:
+	return (
+		PetController.active_pet != null
+		and str(PetController.active_pet.life_state) != "DEAD"
 	)
-	v.add_child(body)
-	var name_edit := LineEdit.new()
-	name_edit.placeholder_text = "Name (2–16)"
-	name_edit.text = "Mochi" if str(species_id) == "blob" else "Buddy"
-	v.add_child(name_edit)
-	var adopt := Button.new()
-	adopt.text = "Adopt" if not has_pet else "Adopt (blocked if living pet)"
-	adopt.disabled = has_pet and PetController.active_pet != null and str(PetController.active_pet.life_state) != "DEAD"
-	# Allow adopt only if no living pet
-	if PetController.active_pet != null and str(PetController.active_pet.life_state) != "DEAD":
-		adopt.disabled = true
-	adopt.pressed.connect(func():
-		var r: Dictionary = PetController.adopt_pet(species_id, name_edit.text)
-		if r.get("ok", false):
-			SceneRouter.go("habitat")
-		else:
-			print("[store] adopt failed ", r)
+
+
+func _open_pen_info(pen: Dictionary) -> void:
+	_adopt_species = pen["species_id"]
+	_adopt_title.text = "Meet the %s" % pen["display"]
+	var block := ""
+	if _living_pet_blocks():
+		block = (
+			"You already have a living pet at home.\n"
+			+ "You can only adopt again after they pass and you bury them.\n\n"
+		)
+	_blocked_label.text = (
+		block
+		+ "Feed need: %s\nPlay need: %s\nHardiness: %s\n\n%s\n\nTalk to Sam at Reception to finalize."
+		% [pen["feed"], pen["play"], pen["hardy"], pen["blurb"]]
 	)
-	v.add_child(adopt)
-	return panel
+	_name_edit.text = "Mochi" if str(_adopt_species) == "blob" else "Buddy"
+	_name_edit.editable = not _living_pet_blocks()
+	_place_adopt_panel()
+	_adopt_panel.visible = true
+	_toast.text = "Viewing %s — adopt at reception if ready" % pen["display"]
+
+
+func _open_reception() -> void:
+	if _adopt_species == &"":
+		_toast.text = "Browse a pen first (E near a pet), then return to Reception"
+		return
+	_open_pen_info(_pen_by_species(_adopt_species))
+	_toast.text = "Reception — name your companion and Adopt"
+
+
+func _pen_by_species(sid: StringName) -> Dictionary:
+	for p in _pens:
+		if p["species_id"] == sid:
+			return p
+	return _pens[0] if not _pens.is_empty() else {}
+
+
+func _confirm_adopt() -> void:
+	if _living_pet_blocks():
+		_toast.text = "Can't adopt while you have a living pet"
+		return
+	if _adopt_species == &"":
+		_toast.text = "Pick a pen first"
+		return
+	var r: Dictionary = PetController.adopt_pet(_adopt_species, _name_edit.text)
+	if r.get("ok", false):
+		_toast.text = "Welcome home, %s!" % _name_edit.text
+		_adopt_panel.visible = false
+		SceneRouter.go("habitat", "from_town")
+	else:
+		_toast.text = "Adopt failed: %s" % str(r.get("reason", "error"))
+
+
+func _process(_delta: float) -> void:
+	if _human == null:
+		return
+	# Animate pen pets a little
+	for pen in _pens:
+		var a: Node = pen.get("actor")
+		if a and a.has_method("play_anim") and randf() < 0.002:
+			a.play_anim(&"happy" if randf() > 0.5 else &"idle")
+
+	_near_reception = RECEPTION_ZONE.has_point(_human.position)
+	_near_pen = {}
+	for pen in _pens:
+		if _human.global_position.distance_to(pen["pos"]) <= PEN_RADIUS:
+			_near_pen = pen
+			break
+
+	if _adopt_panel.visible:
+		_label.text = "Choosing a companion — Close or Adopt"
+		return
+
+	if EXIT_DOOR.has_point(_human.position):
+		_label.text = "Exit — press E to return to Town"
+		if Input.is_action_just_pressed("interact"):
+			SceneRouter.go("town", "from_store")
+		return
+
+	if not _near_pen.is_empty():
+		_label.text = "Near %s — press E to learn more / adopt" % _near_pen["display"]
+		if Input.is_action_just_pressed("interact"):
+			_open_pen_info(_near_pen)
+		return
+
+	if _near_reception:
+		_label.text = "Reception (Sam) — press E to adopt selected species"
+		if Input.is_action_just_pressed("interact"):
+			_open_reception()
+		return
+
+	_label.text = "Paw & Co. — pens left/center/right · Reception north · Exit south"
+
+	if Input.is_action_just_pressed("ui_cancel") and _adopt_panel.visible:
+		_adopt_panel.visible = false

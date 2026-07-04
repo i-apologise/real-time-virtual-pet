@@ -8,7 +8,10 @@ func run() -> Dictionary:
 		"res://scenes/habitat/habitat.gd",
 		"res://scenes/graveyard/graveyard.tscn",
 		"res://scenes/store/pet_store.tscn",
+		"res://scenes/store/pet_store.gd",
 		"res://scenes/town/town.tscn",
+		"res://scenes/park/park.tscn",
+		"res://scenes/park/park.gd",
 		"res://scenes/main.tscn",
 		"res://scenes/ui/tutorial.tscn",
 	]
@@ -23,4 +26,4 @@ func run() -> Dictionary:
 	node.free()
 	if label != "Player House":
 		return {"ok": false, "message": "poi label %s" % label}
-	return {"ok": true, "message": "habitat/store/graveyard/town scenes load OK"}
+	return {"ok": true, "message": "habitat/store/park/graveyard/town scenes load OK"}

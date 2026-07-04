@@ -1,6 +1,6 @@
 # Needs your review
 
-- **PR #19** — need meters, ETAs, feed feedback
-  https://github.com/i-apologise/real-time-virtual-pet/pull/19
+- **PR #20** — park, leash escort, real store, world bounds
+  https://github.com/i-apologise/real-time-virtual-pet/pull/20
 
-Also in flight / unmerged stacks: sleep CARE UX, nav/home/dead art if not merged yet.
+Review Files changed: `docs/pr-screenshots/pr20-*.png`

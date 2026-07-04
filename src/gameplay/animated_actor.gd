@@ -22,6 +22,25 @@ var _collision: CollisionShape2D
 var _condition: String = "healthy"
 var _follow_target: Node2D = null  # leash follow
 var _follow_offset: Vector2 = Vector2(-18, 6)
+var _use_world_bounds: bool = false
+var _world_bounds: Rect2 = Rect2(20, 20, 440, 280)
+
+
+func set_world_bounds(rect: Rect2) -> void:
+	## Keep actor on-map (camera limits alone do not stop walking off-screen).
+	_use_world_bounds = true
+	_world_bounds = rect
+
+
+func clear_world_bounds() -> void:
+	_use_world_bounds = false
+
+
+func _clamp_to_world() -> void:
+	if not _use_world_bounds:
+		return
+	global_position.x = clampf(global_position.x, _world_bounds.position.x, _world_bounds.end.x)
+	global_position.y = clampf(global_position.y, _world_bounds.position.y, _world_bounds.end.y)
 
 
 func setup_collision(as_pet: bool = false) -> void:
@@ -192,6 +211,7 @@ func _physics_process(delta: float) -> void:
 			var dir := to.normalized()
 			velocity = dir * move_speed
 			move_and_slide()
+			_clamp_to_world()
 			_update_facing(dir)
 			var walk := "walk_%s" % _facing
 			if is_pet and _sprite and _sprite.sprite_frames.has_animation("walk"):
@@ -203,22 +223,26 @@ func _physics_process(delta: float) -> void:
 		else:
 			velocity = Vector2.ZERO
 			move_and_slide()
+			_clamp_to_world()
 		return
 
 	# Pet idle / walk_to only
 	if is_pet and not is_player_controlled and _walk_target == null and not _acting:
 		velocity = Vector2.ZERO
 		move_and_slide()
+		_clamp_to_world()
 		return
 
 	if _acting and _walk_target == null:
 		velocity = Vector2.ZERO
 		move_and_slide()
+		_clamp_to_world()
 		return
 
 	if _busy and _walk_target == null and not _acting:
 		velocity = Vector2.ZERO
 		move_and_slide()
+		_clamp_to_world()
 		return
 
 	var dir2 := Vector2.ZERO
@@ -244,6 +268,7 @@ func _physics_process(delta: float) -> void:
 
 	velocity = dir2 * move_speed
 	move_and_slide()
+	_clamp_to_world()
 
 	if dir2 != Vector2.ZERO and not _acting:
 		_update_facing(dir2)

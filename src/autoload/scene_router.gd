@@ -10,6 +10,7 @@ const SCENE_PATHS := {
 	"graveyard": "res://scenes/graveyard/graveyard.tscn",
 	"pet_store": "res://scenes/store/pet_store.tscn",
 	"town": "res://scenes/town/town.tscn",
+	"park": "res://scenes/park/park.tscn",
 	"tutorial": "res://scenes/ui/tutorial.tscn",
 }
 

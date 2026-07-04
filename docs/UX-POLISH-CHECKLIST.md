@@ -38,6 +38,13 @@ Living list of player-facing papercuts. When changing care/HUD/nav, scan this li
 
 Starter hunger is **80/100**; feed +30 **clamps to 100**. Bar can look “full already” without numbers. Cooldown is **10 minutes** real-time — second feed fails until ready. Fix: numbers + ETA + explicit toast.
 
+## Fixed (park / escort / store / bounds)
+
+- [x] **World bounds clamp** on actors (can't walk off-screen).
+- [x] **Pet Park** visitable from town (paths, fountain, benches, gate).
+- [x] **WALK = leash escort** — pet follows into Town/Park; min 10s; E to end.
+- [x] **Pet store** walkable floor plan: reception (Sam), 3 pens, shelves, exit.
+
 ## Rules for agents
 
 1. Never show raw enum reasons (`PET_SLEEPING`) to players — always friendly copy.

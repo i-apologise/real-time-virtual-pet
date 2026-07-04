@@ -43,11 +43,33 @@ func is_busy() -> bool:
 
 func try_start_care(action: StringName) -> Dictionary:
 	if state != State.IDLE:
-		return {"ok": false, "reason": &"BUSY"}
+		return {"ok": false, "reason": &"BUSY", "message": "Still busy — wait a second"}
 	if human == null or pet == null or PetController.active_pet == null:
-		return {"ok": false, "reason": &"NO_ACTORS"}
+		return {"ok": false, "reason": &"NO_ACTORS", "message": "No pet here"}
 	if str(PetController.active_pet.life_state) == "DEAD":
-		return {"ok": false, "reason": &"PET_DEAD"}
+		return {"ok": false, "reason": &"PET_DEAD", "message": "They're gone — backyard to dig"}
+
+	# Gate BEFORE choreography so we never walk/act then toast "PET_SLEEPING"
+	var p = PetController.active_pet
+	var act := String(action)
+	if p.is_sleeping() and act != "wake":
+		if act == "sleep":
+			return {
+				"ok": false,
+				"reason": &"ALREADY_SLEEPING",
+				"message": "Already asleep — Zzz…",
+			}
+		return {
+			"ok": false,
+			"reason": &"PET_SLEEPING",
+			"message": "Zzz… wake them first (CARE → WAKE)",
+		}
+	if not p.is_sleeping() and act == "wake":
+		return {
+			"ok": false,
+			"reason": &"NOT_SLEEPING",
+			"message": "They're already awake",
+		}
 
 	_action = action
 	_token += 1
@@ -268,9 +290,32 @@ func _complete_care() -> void:
 	var result: Dictionary = PetController.request_care(action)
 	_sync_pet_mood()
 	if result.get("ok", false):
-		toast.emit("%s done!" % str(action).capitalize())
+		match String(action):
+			"sleep":
+				toast.emit("Zzz… good night!")
+			"wake":
+				toast.emit("Wakey wakey!")
+			_:
+				toast.emit("%s done!" % str(action).capitalize())
 	else:
-		toast.emit("%s failed: %s" % [str(action), str(result.get("reason", ""))])
+		var reason := str(result.get("reason", ""))
+		var msg := str(result.get("message", ""))
+		if msg == "":
+			# Friendly fallbacks for sim-layer reasons
+			match reason:
+				"PET_SLEEPING":
+					msg = "Zzz… wake them first (CARE → WAKE)"
+				"COOLDOWN":
+					msg = "%s needs a short rest" % str(action).capitalize()
+				"ENERGY_TOO_LOW":
+					msg = "Too tired — let them sleep first"
+				"ALREADY_SLEEPING":
+					msg = "Already asleep — Zzz…"
+				"NOT_SLEEPING":
+					msg = "They're already awake"
+				_:
+					msg = "%s failed — %s" % [str(action).capitalize(), reason.replace("_", " ").to_lower()]
+		toast.emit(msg)
 	choreography_finished.emit(action, result)
 
 

@@ -77,6 +77,8 @@ func set_condition(condition: String) -> void:
 		"dead":
 			# Art carries the look — keep full color on dead frames
 			_sprite.modulate = Color.WHITE
+		"sleep", "sleeping":
+			_sprite.modulate = Color(0.92, 0.94, 1.0)  # soft cool tint while napping
 		"critical", "dying", "weak":
 			_sprite.modulate = Color(0.92, 0.72, 0.72)
 		"hungry":
@@ -123,6 +125,9 @@ func play_idle() -> void:
 	if is_pet:
 		var anim := _pet_idle_anim()
 		if _sprite.sprite_frames.has_animation(anim):
+			# Sleep / dead always loop as ambient mood
+			if String(anim) in ["sleep", "dead"]:
+				_sprite.sprite_frames.set_animation_loop(anim, true)
 			_sprite.play(anim)
 		return
 	var anim2 := "idle_%s" % _facing
@@ -134,6 +139,8 @@ func _pet_idle_anim() -> StringName:
 	match _condition:
 		"dead":
 			return &"dead"
+		"sleep", "sleeping":
+			return &"sleep"
 		"critical", "dying", "weak":
 			return &"weak"
 		"hungry":
@@ -148,11 +155,17 @@ func play_anim(anim: StringName) -> void:
 	if not _sprite.sprite_frames.has_animation(anim):
 		push_warning("Missing anim: %s" % anim)
 		return
-	# Care actions: play once. Dead / mood loops: keep factory loop flags.
-	var one_shot := String(anim) in ["feed", "play", "clean", "sleep", "wake", "dig", "eat"]
-	if _sprite.sprite_frames.has_animation(anim) and one_shot:
-		_sprite.sprite_frames.set_animation_loop(anim, false)
-	_acting = one_shot  # dead/mood stay free so idle-like loops can run
+	# Care actions: play once. Mood loops (sleep/dead/idle…): keep looping.
+	var name_s := String(anim)
+	var loop_mood := name_s in ["sleep", "dead", "idle", "hungry", "weak", "happy", "sad", "walk"]
+	var one_shot := name_s in ["feed", "play", "clean", "wake", "dig", "eat"]
+	# Human "sleep" pose during care is one-shot; pet sleep mood loops
+	if is_pet and name_s == "sleep":
+		one_shot = false
+		loop_mood = true
+	if _sprite.sprite_frames.has_animation(anim):
+		_sprite.sprite_frames.set_animation_loop(anim, loop_mood and not one_shot)
+	_acting = one_shot
 	_sprite.stop()
 	_sprite.play(anim)
 

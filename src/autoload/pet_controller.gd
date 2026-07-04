@@ -13,6 +13,9 @@ var last_status: Dictionary = {"message": "", "priority": 0}
 var escort_active: bool = false
 var escort_elapsed_sec: float = 0.0
 const ESCORT_MIN_SEC := 10.0
+## Set on each focus/boot catch-up for session summary UI.
+var last_session_summary: Dictionary = {}
+var _session_banner_pending: bool = false
 
 
 func start_escort() -> void:
@@ -72,6 +75,7 @@ func boot() -> void:
 	_repair_archive_state()
 	if active_pet != null:
 		_run_catchup_and_apply(now)
+		_refresh_session_summary(true)
 	else:
 		EventBus.needs_adoption.emit()
 	publish()
@@ -95,7 +99,24 @@ func _process(delta: float) -> void:
 func on_focus_resume() -> void:
 	if active_pet != null:
 		_run_catchup_and_apply(TimeService.now_unix_utc())
+		_refresh_session_summary(true)
 		publish()
+
+
+func consume_session_banner() -> Dictionary:
+	## Habitat shows once per boot/resume when pending.
+	if not _session_banner_pending:
+		return {}
+	_session_banner_pending = false
+	return last_session_summary.duplicate(true)
+
+
+func _refresh_session_summary(from_resume: bool) -> void:
+	var now: float = TimeService.now_unix_utc()
+	last_session_summary = CareAdvisor.session_summary(active_pet, meta, now)
+	if from_resume or bool(meta.get("show_session_banner", false)):
+		_session_banner_pending = active_pet != null
+	meta["show_session_banner"] = false
 
 
 func get_status_line() -> String:
@@ -184,6 +205,13 @@ func publish() -> void:
 func _run_catchup_and_apply(now: float) -> void:
 	if active_pet == null:
 		return
+	# Record gap before commit so session summary can say "you were away X"
+	var prev_last: float = float(meta.get("last_sim_unix_utc", now))
+	var away: float = maxf(0.0, now - prev_last)
+	meta["pre_catchup_last_sim"] = prev_last
+	meta["session_away_sec"] = away
+	if away >= 45.0:
+		meta["show_session_banner"] = true
 	var before: StringName = active_pet.life_state
 	var result: CatchupResult = NeedsSimulator.run_catchup(active_pet, meta, now)
 	last_catchup_result = result

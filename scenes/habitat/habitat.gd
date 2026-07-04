@@ -6,6 +6,7 @@ const AnimatedActorScr = preload("res://src/gameplay/animated_actor.gd")
 const CareDirectorScr = preload("res://src/gameplay/care_director.gd")
 const MoodStateMachineScr = preload("res://src/sim/mood_state_machine.gd")
 const NeedsForecastScr = preload("res://src/sim/needs_forecast.gd")
+const CareAdvisorScr = preload("res://src/sim/care_advisor.gd")
 
 const NEAR_PET_DIST := 56.0
 const LAYER_WORLD := 1
@@ -37,8 +38,15 @@ var _stat_value_labs: Dictionary = {}  # name -> Label "72"
 var _stat_eta_labs: Dictionary = {}  # name -> Label "hungry in 3h"
 var _stat_title: Label
 var _stat_forecast: Label
+var _stat_suggest: Label
 var _prev_stats: Dictionary = {}  # for flash on change
 var _flash_t: Dictionary = {}  # name -> remaining flash sec
+
+# Session check-in banner (top-center, dismissible)
+var _session_panel: PanelContainer
+var _session_title: Label
+var _session_body: Label
+var _session_ttl: float = 0.0
 
 # Pokemon-style vertical care menu (bottom-left)
 var _care_panel: PanelContainer
@@ -78,6 +86,7 @@ func _ready() -> void:
 	if not EventBus.profile_updated.is_connected(_on_profile):
 		EventBus.profile_updated.connect(_on_profile)
 	_refresh_all()
+	call_deferred("_try_show_session_banner")
 
 
 func _apply_spawn() -> void:
@@ -452,6 +461,13 @@ func _build_hud() -> void:
 	_stat_forecast.add_theme_font_size_override("font_size", 11)
 	_stat_forecast.add_theme_color_override("font_color", Color(0.25, 0.22, 0.18))
 	stats_v.add_child(_stat_forecast)
+	_stat_suggest = Label.new()
+	_stat_suggest.text = "Suggested: —"
+	_stat_suggest.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_stat_suggest.custom_minimum_size = Vector2(220, 0)
+	_stat_suggest.add_theme_font_size_override("font_size", 12)
+	_stat_suggest.add_theme_color_override("font_color", Color(0.55, 0.15, 0.12))
+	stats_v.add_child(_stat_suggest)
 	_stat_bars.clear()
 	_stat_value_labs.clear()
 	_stat_eta_labs.clear()
@@ -620,6 +636,58 @@ func _build_hud() -> void:
 	timer_v.add_child(_care_timer_bar)
 	call_deferred("_place_care_timer")
 
+	# Session check-in banner (shown once after boot/resume with gap)
+	_session_panel = PanelContainer.new()
+	_session_panel.visible = false
+	_session_panel.add_theme_stylebox_override("panel", _style_panel_light())
+	layer.add_child(_session_panel)
+	var sv := VBoxContainer.new()
+	sv.add_theme_constant_override("separation", 6)
+	_session_panel.add_child(sv)
+	_session_title = Label.new()
+	_session_title.add_theme_font_size_override("font_size", 16)
+	_session_title.add_theme_color_override("font_color", Color(0.1, 0.08, 0.06))
+	sv.add_child(_session_title)
+	_session_body = Label.new()
+	_session_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_session_body.custom_minimum_size = Vector2(320, 0)
+	_session_body.add_theme_font_size_override("font_size", 12)
+	_session_body.add_theme_color_override("font_color", Color(0.2, 0.18, 0.14))
+	sv.add_child(_session_body)
+	var dismiss := Button.new()
+	dismiss.text = "Got it (Esc)"
+	dismiss.pressed.connect(_hide_session_banner)
+	sv.add_child(dismiss)
+
+
+func _try_show_session_banner() -> void:
+	var snap: Dictionary = PetController.consume_session_banner()
+	if snap.is_empty():
+		return
+	if _session_panel == null:
+		return
+	_session_title.text = str(snap.get("title", "Check-in"))
+	_session_body.text = str(snap.get("body", ""))
+	_session_panel.visible = true
+	_session_ttl = 14.0
+	_place_session_banner()
+	var audio := get_node_or_null("/root/AudioService")
+	if audio and audio.has_method("play_menu"):
+		audio.play_menu()
+
+
+func _hide_session_banner() -> void:
+	if _session_panel:
+		_session_panel.visible = false
+	_session_ttl = 0.0
+
+
+func _place_session_banner() -> void:
+	if _session_panel == null:
+		return
+	var vp := get_viewport().get_visible_rect().size
+	_session_panel.position = Vector2(vp.x * 0.5 - 170.0, 48.0)
+
 
 func _on_care_timer(seconds_left: float, total: float, label: String) -> void:
 	if _care_timer_panel == null:
@@ -675,16 +743,13 @@ func _panel(text: String) -> PanelContainer:
 
 
 func _action_enabled(action: String) -> bool:
-	var p = PetController.active_pet
-	if p == null or str(p.life_state) == "DEAD":
-		return action == "cancel"
 	if action == "cancel":
 		return true
-	if p.is_sleeping():
-		return action == "wake"  # only wake while sleeping
-	if action == "wake":
+	var p = PetController.active_pet
+	if p == null:
 		return false
-	return true
+	var now: float = TimeService.now_unix_utc()
+	return CareAdvisorScr.action_blocked_reason(action, p, now) == &""
 
 
 func _move_care_cursor(dir: int) -> void:
@@ -704,23 +769,42 @@ func _move_care_cursor(dir: int) -> void:
 
 func _refresh_care_cursor() -> void:
 	var names := ["FEED", "WALK", "PLAY", "CLEAN", "SLEEP", "WAKE", "CANCEL"]
+	var now: float = TimeService.now_unix_utc()
+	var pet = PetController.active_pet
 	for i in _care_labels.size():
 		var lab: Label = _care_labels[i]
 		var action: String = str(_care_actions[i])
 		var enabled := _action_enabled(action)
 		var selected := i == _care_cursor
+		var suffix := ""
+		if action != "cancel" and pet != null:
+			var cd: float = CareAdvisorScr.cooldown_for(action, pet, now)
+			var block: StringName = CareAdvisorScr.action_blocked_reason(action, pet, now)
+			if block == &"COOLDOWN" and cd > 0.0:
+				suffix = " · %s" % CareAdvisorScr.format_cd(cd)
+			elif block == &"PET_SLEEPING":
+				suffix = " · sleep"
+			elif block == &"ENERGY_TOO_LOW":
+				suffix = " · tired"
+			elif block == &"NOT_SLEEPING":
+				suffix = " · awake"
+			elif block == &"ALREADY_SLEEPING":
+				suffix = " · zzz"
+			elif enabled and action in ["feed", "walk", "play", "clean"]:
+				suffix = " · ready"
+		var base: String = str(names[i]) + suffix
 		if selected:
-			lab.text = "▶ " + names[i]
+			lab.text = "▶ " + base
 			lab.add_theme_color_override("font_color", Color(1.0, 1.0, 0.95))
-			lab.add_theme_font_size_override("font_size", 17)
-		elif not enabled:
-			lab.text = "  " + names[i]
-			lab.add_theme_color_override("font_color", Color(0.55, 0.52, 0.48))
-			lab.add_theme_font_size_override("font_size", 15)
-		else:
-			lab.text = "  " + names[i]
-			lab.add_theme_color_override("font_color", Color(0.08, 0.08, 0.10))
 			lab.add_theme_font_size_override("font_size", 16)
+		elif not enabled:
+			lab.text = "  " + base
+			lab.add_theme_color_override("font_color", Color(0.55, 0.52, 0.48))
+			lab.add_theme_font_size_override("font_size", 14)
+		else:
+			lab.text = "  " + base
+			lab.add_theme_color_override("font_color", Color(0.08, 0.08, 0.10))
+			lab.add_theme_font_size_override("font_size", 15)
 		if i < _care_row_panels.size():
 			var row: PanelContainer = _care_row_panels[i]
 			row.add_theme_stylebox_override("panel", _style_row(selected, not enabled))
@@ -762,11 +846,19 @@ func _at_door(rect: Rect2) -> bool:
 func _process(delta: float) -> void:
 	_zzz_t += delta
 	_tick_stat_flashes(delta)
+	if _session_ttl > 0.0:
+		_session_ttl -= delta
+		_place_session_banner()
+		if _session_ttl <= 0.0:
+			_hide_session_banner()
 	_update_near_pet_ui()
 	_update_zzz()
 	_place_stats_panel()
 	if _care_menu_open:
 		_place_care_menu()
+		# Live-refresh cooldowns while menu open
+		if int(_zzz_t * 2.0) % 2 == 0:
+			_refresh_care_cursor()
 	# Door proximity hints (backyard is attached to home)
 	if _human and not _care_menu_open and not (_director and _director.is_busy()):
 		if _at_door(DOOR_TOWN):
@@ -817,15 +909,20 @@ func _open_care_menu() -> void:
 		_show_toast("Take them out the back door to the backyard")
 		return
 	_care_menu_open = true
-	# Default to WAKE when sleeping; FEED when awake
-	if PetController.active_pet.is_sleeping():
-		_care_cursor = _care_actions.find("wake")
-		if _care_cursor < 0:
-			_care_cursor = 0
-		_show_toast("They're sleeping (Zzz) — choose WAKE, or X to close")
+	# Cursor on suggested action (or WAKE while sleeping)
+	var now_m: float = TimeService.now_unix_utc()
+	var sug_m: Dictionary = CareAdvisorScr.suggest(PetController.active_pet, now_m)
+	var sug_a := str(sug_m.get("action", ""))
+	if sug_a != "" and _care_actions.has(sug_a):
+		_care_cursor = _care_actions.find(sug_a)
+	elif PetController.active_pet.is_sleeping():
+		_care_cursor = maxi(0, _care_actions.find("wake"))
 	else:
 		_care_cursor = 0
-		_show_toast("↑↓ select · Z/Enter confirm · X cancel")
+	if PetController.active_pet.is_sleeping():
+		_show_toast("They're sleeping (Zzz) — choose WAKE, or X to close")
+	else:
+		_show_toast("%s · ↑↓ · Z/Enter · X" % str(sug_m.get("label", "CARE")))
 	_refresh_care_cursor()
 	_place_care_menu()
 	_care_panel.visible = true
@@ -930,10 +1027,20 @@ func _refresh_need_meters(p) -> void:
 		if _stat_value_labs.has(k):
 			(_stat_value_labs[k] as Label).text = "%d" % int(round(v))
 
-	# ETAs from species decay rates
+	# ETAs from species decay rates + suggested care
 	var fc: Dictionary = NeedsForecastScr.forecast(p)
 	if _stat_forecast:
 		_stat_forecast.text = str(fc.get("summary", ""))
+	if _stat_suggest:
+		var sug: Dictionary = CareAdvisorScr.suggest(p, TimeService.now_unix_utc())
+		var lab := str(sug.get("label", ""))
+		var det := str(sug.get("detail", ""))
+		_stat_suggest.text = lab if det == "" else "%s  (%s)" % [lab, det]
+		# Urgent red-ish when dying/critical wording
+		if lab.begins_with("Urgent"):
+			_stat_suggest.add_theme_color_override("font_color", Color(0.75, 0.1, 0.08))
+		else:
+			_stat_suggest.add_theme_color_override("font_color", Color(0.55, 0.15, 0.12))
 	if _stat_eta_labs.has("hunger"):
 		var hn: float = float(fc.get("hunger_to_needy_sec", -1.0))
 		(_stat_eta_labs["hunger"] as Label).text = "  hungry in %s" % NeedsForecastScr.format_eta(hn)
@@ -1000,6 +1107,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_confirm_care_selection()
 			return
 
+	if _session_panel and _session_panel.visible and (k.keycode == KEY_ESCAPE or k.keycode == KEY_X):
+		_hide_session_banner()
+		return
 	if k.keycode == KEY_F3:
 		_debug_visible = not _debug_visible
 		_debug.visible = _debug_visible

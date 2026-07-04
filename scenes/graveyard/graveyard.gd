@@ -1,13 +1,16 @@
 extends Node2D
-## Backyard attached to the house: walk from home south door, dig at plot, return via house path.
+## Backyard attached to the house. Clear path + large house-door zone back inside.
 
 const SpriteFactoryScr = preload("res://src/gameplay/sprite_factory.gd")
 const AnimatedActorScr = preload("res://src/gameplay/animated_actor.gd")
 
 const LAYER_WORLD := 1
 const DIG_HOLD_SEC := 2.5
-const PLOT_RADIUS := 40.0
-const DOOR_HOUSE := Rect2(40, 300, 80, 50)  # path back into house
+const PLOT_RADIUS := 44.0
+const WORLD_BOUNDS := Rect2(28, 28, 584, 344)
+## Large, walkable house return zone (north — matches home south door feel)
+const HOUSE_DOOR_POS := Vector2(240, 70)
+const HOUSE_DOOR_RADIUS := 52.0
 
 var _human: CharacterBody2D
 var _dead_pet: CharacterBody2D
@@ -17,8 +20,9 @@ var _label: Label
 var _toast: Label
 var _dig_bar: ProgressBar
 var _dig_panel: PanelContainer
-var _plot_pos: Vector2 = Vector2(320, 200)
+var _plot_pos: Vector2 = Vector2(360, 240)
 var _near_plot: bool = false
+var _near_house: bool = false
 var _digging: bool = false
 var _dig_accum: float = 0.0
 var _buried_this_visit: bool = false
@@ -35,12 +39,24 @@ func _apply_spawn() -> void:
 	if _human == null:
 		return
 	var spawn := SceneRouter.take_spawn("default")
+	# Enter from house south door → appear just inside backyard at house connection
 	match spawn:
 		"from_house":
-			# enter from house back door — south path
-			_human.position = Vector2(80, 320)
+			_human.position = Vector2(240, 100)
 		_:
-			_human.position = Vector2(80, 320)
+			_human.position = Vector2(240, 100)
+	_human.set_world_bounds(WORLD_BOUNDS)
+
+
+func _go_house() -> void:
+	if _digging:
+		return
+	if Engine.has_singleton("AudioService") or true:
+		# AudioService is an autoload node, not Engine singleton
+		pass
+	if has_node("/root/AudioService"):
+		get_node("/root/AudioService").play_door()
+	SceneRouter.go("habitat", "from_backyard")
 
 
 func _tile(area: Rect2, kind: String) -> void:
@@ -79,66 +95,75 @@ func _solid(rect: Rect2, color: Color) -> void:
 	_world.add_child(body)
 
 
+func _decor(rect: Rect2, color: Color, z: int = -80) -> void:
+	var r := ColorRect.new()
+	r.color = color
+	r.size = rect.size
+	r.position = rect.position
+	r.z_index = z
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_world.add_child(r)
+
+
 func _build() -> void:
 	_world = Node2D.new()
 	_world.y_sort_enabled = true
 	add_child(_world)
 
 	_tile(Rect2(0, 0, 640, 400), "grass")
-	# Path from house door (bottom-left) to plot
-	_tile(Rect2(48, 280, 48, 100), "path")
-	_tile(Rect2(48, 200, 240, 48), "path")
-	_tile(Rect2(240, 160, 160, 120), "path")
+	# Clear path from HOUSE DOOR (north) down to plot
+	_tile(Rect2(210, 60, 60, 200), "path")
+	_tile(Rect2(210, 220, 200, 48), "path")
 
-	# fence — open gap at house connection (bottom-left)
-	_solid(Rect2(0, 0, 640, 16), Color("6B4E2E"))
-	_solid(Rect2(0, 384, 640, 16), Color("6B4E2E"))
-	_solid(Rect2(0, 0, 16, 300), Color("6B4E2E"))
-	_solid(Rect2(0, 350, 16, 50), Color("6B4E2E"))  # leave gap ~300–350 for house path
-	_solid(Rect2(624, 0, 16, 400), Color("6B4E2E"))
+	# Fence borders — gap at north for house door (no solid in doorway)
+	_solid(Rect2(0, 0, 180, 18), Color("6B4E2E"))
+	_solid(Rect2(300, 0, 340, 18), Color("6B4E2E"))  # gap 180–300 for house door
+	_solid(Rect2(0, 382, 640, 18), Color("6B4E2E"))
+	_solid(Rect2(0, 0, 18, 400), Color("6B4E2E"))
+	_solid(Rect2(622, 0, 18, 400), Color("6B4E2E"))
 
-	# House exterior wall peek (north of entry) — “attached to home”
-	_solid(Rect2(20, 340, 100, 40), Color("C48C5C"))
+	# House facade above the yard (visual only — NOT blocking the door walk zone)
+	_decor(Rect2(160, 8, 160, 36), Color("C48C5C"), -60)
+	_decor(Rect2(170, 14, 40, 24), Color("8EC8E8"), -59)  # window
+	_decor(Rect2(270, 14, 40, 24), Color("8EC8E8"), -59)
+	# Door opening (walkable) — mat + frame, no collision
+	_decor(Rect2(210, 40, 60, 50), Color("5A3A22"), -55)
+	_decor(Rect2(218, 48, 44, 40), Color("8B5A2B"), -54)
+	_decor(Rect2(248, 64, 6, 10), Color("D4AF37"), -53)  # knob
 	var house_lab := Label.new()
-	house_lab.text = "← House door"
-	house_lab.position = Vector2(28, 310)
-	house_lab.add_theme_font_size_override("font_size", 11)
+	house_lab.text = "HOUSE DOOR ↑  (E)"
+	house_lab.position = Vector2(200, 92)
+	house_lab.add_theme_font_size_override("font_size", 12)
 	house_lab.add_theme_color_override("font_color", Color.WHITE)
+	house_lab.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+	house_lab.add_theme_constant_override("outline_size", 3)
 	_world.add_child(house_lab)
-	# door plate
-	var door := ColorRect.new()
-	door.size = Vector2(24, 28)
-	door.position = Vector2(58, 348)
-	door.color = Color("5A3A22")
-	door.z_index = 5
-	door.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_world.add_child(door)
 
 	_draw_existing_graves()
 
-	# Open dig plot
+	# Dig plot
 	var plot := ColorRect.new()
-	plot.size = Vector2(48, 32)
-	plot.position = _plot_pos - Vector2(24, 16)
+	plot.size = Vector2(52, 36)
+	plot.position = _plot_pos - Vector2(26, 18)
 	plot.color = Color("4A3C28")
 	plot.z_index = -50
 	plot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_world.add_child(plot)
 	var plot_l := Label.new()
 	plot_l.text = "EMPTY PLOT"
-	plot_l.position = _plot_pos + Vector2(-28, 18)
-	plot_l.add_theme_font_size_override("font_size", 10)
+	plot_l.position = _plot_pos + Vector2(-32, 20)
+	plot_l.add_theme_font_size_override("font_size", 11)
 	plot_l.add_theme_color_override("font_color", Color.WHITE)
-	plot_l.z_index = -49
 	_world.add_child(plot_l)
 
 	_human = AnimatedActorScr.new()
 	_human.is_player_controlled = true
 	_human.move_speed = 105.0
-	_human.position = Vector2(80, 320)
+	_human.position = Vector2(240, 100)
 	_world.add_child(_human)
 	_human.setup_frames(SpriteFactoryScr.human_frames(), 2.0)
 	_human.setup_collision(false)
+	_human.set_world_bounds(WORLD_BOUNDS)
 
 	_camera = Camera2D.new()
 	_camera.zoom = Vector2(2.2, 2.2)
@@ -162,6 +187,8 @@ func _build() -> void:
 	_label.position = Vector2(8, 8)
 	_label.add_theme_font_size_override("font_size", 13)
 	_label.add_theme_color_override("font_color", Color.WHITE)
+	_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	_label.add_theme_constant_override("outline_size", 3)
 	layer.add_child(_label)
 	_toast = Label.new()
 	_toast.position = Vector2(8, 32)
@@ -171,7 +198,7 @@ func _build() -> void:
 	var back := Button.new()
 	back.text = "Enter house"
 	back.position = Vector2(8, 56)
-	back.pressed.connect(func(): SceneRouter.go("habitat", "from_backyard"))
+	back.pressed.connect(_go_house)
 	layer.add_child(back)
 
 	_dig_panel = PanelContainer.new()
@@ -195,7 +222,7 @@ func _draw_existing_graves() -> void:
 	for g in graves:
 		if not (g is GraveRecord):
 			continue
-		var pos := Vector2(80 + (i % 8) * 64, 60 + int(i / 8) * 70)
+		var pos := Vector2(80 + (i % 8) * 64, 140 + int(i / 8) * 70)
 		var stone := ColorRect.new()
 		stone.size = Vector2(28, 36)
 		stone.position = pos
@@ -203,7 +230,6 @@ func _draw_existing_graves() -> void:
 		stone.z_index = int(pos.y)
 		stone.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_world.add_child(stone)
-		# simple headstone top
 		var top := ColorRect.new()
 		top.size = Vector2(20, 10)
 		top.position = pos + Vector2(4, -8)
@@ -231,9 +257,9 @@ func _refresh_state() -> void:
 			_dead_pet.play_anim(&"dead")
 			_dead_pet.set_collision_enabled(false)
 	if needs_burial:
-		_label.text = "Your backyard — bring %s to the EMPTY PLOT · hold E to dig · house door SW" % p.name
+		_label.text = "Backyard — bring %s to EMPTY PLOT · hold E dig · walk north to HOUSE DOOR" % p.name
 	else:
-		_label.text = "Your backyard — rest in peace · E at house door (SW) to go home"
+		_label.text = "Backyard — walk north to HOUSE DOOR (E) or press Enter house"
 		_dig_panel.visible = false
 
 
@@ -241,20 +267,22 @@ func _process(delta: float) -> void:
 	if _human == null:
 		return
 
-	# House door exit
-	if DOOR_HOUSE.has_point(_human.position):
+	_near_house = _human.global_position.distance_to(HOUSE_DOOR_POS) <= HOUSE_DOOR_RADIUS
+	_near_plot = _human.global_position.distance_to(_plot_pos) <= PLOT_RADIUS
+
+	# Prefer house door when near it (don't start dig by accident on E tap)
+	if _near_house and not _digging:
 		_label.text = "House door — press E to go inside"
-		if Input.is_action_just_pressed("interact") and not _digging:
-			SceneRouter.go("habitat", "from_backyard")
+		if Input.is_action_just_pressed("interact"):
+			_go_house()
 			return
 
-	_near_plot = _human.global_position.distance_to(_plot_pos) <= PLOT_RADIUS
 	var p = PetController.active_pet
 	var needs_burial: bool = (
 		p != null and str(p.life_state) == "DEAD" and not p.buried and not _buried_this_visit
 	)
 
-	if needs_burial and _near_plot:
+	if needs_burial and _near_plot and not _near_house:
 		_dig_panel.visible = true
 		_label.text = "At the plot — hold E or Space to dig %s's grave" % p.name
 		var holding := Input.is_action_pressed("interact") or Input.is_key_pressed(KEY_SPACE)
@@ -266,6 +294,9 @@ func _process(delta: float) -> void:
 				_human.set_busy(true)
 			if _human.has_method("play_anim"):
 				_human.play_anim(&"dig")
+			# dig scrape SFX occasionally
+			if int(_dig_accum * 10) % 8 == 0 and has_node("/root/AudioService"):
+				get_node("/root/AudioService").play("dig", 0.9 + randf() * 0.2, -10.0)
 			if _dig_accum >= DIG_HOLD_SEC:
 				_finish_dig()
 		else:
@@ -278,11 +309,14 @@ func _process(delta: float) -> void:
 				if _human.has_method("play_idle"):
 					_human.play_idle()
 	else:
-		_dig_panel.visible = needs_burial and _near_plot
-		if needs_burial and not _near_plot and not DOOR_HOUSE.has_point(_human.position):
+		_dig_panel.visible = needs_burial and _near_plot and not _near_house
+		if not _near_plot:
 			_dig_accum = 0.0
 			_dig_bar.value = 0.0
-			_digging = false
+			if _digging:
+				_digging = false
+				if _human.has_method("set_busy"):
+					_human.set_busy(false)
 
 
 func _finish_dig() -> void:
@@ -300,11 +334,13 @@ func _finish_dig() -> void:
 		_buried_this_visit = true
 		if r.get("grave") is GraveRecord:
 			pet_name = (r["grave"] as GraveRecord).name
-		_toast.text = "Grave dug. %s is at rest. Enter house (SW) when ready." % pet_name
+		_toast.text = "Grave dug. %s is at rest. Walk north to HOUSE DOOR." % pet_name
+		if has_node("/root/AudioService"):
+			get_node("/root/AudioService").play("bury")
 		if _dead_pet:
 			_dead_pet.visible = false
 		_dig_panel.visible = false
-		_label.text = "Burial complete — house door (SW) · adopt again at the Store"
+		_label.text = "Burial complete — HOUSE DOOR north (E) · adopt at Store"
 		var stone := ColorRect.new()
 		stone.size = Vector2(28, 36)
 		stone.position = _plot_pos - Vector2(14, 28)
@@ -319,3 +355,5 @@ func _finish_dig() -> void:
 	else:
 		_toast.text = "Could not bury: %s" % str(r.get("reason", "fail"))
 		_dig_bar.value = 0.0
+		if has_node("/root/AudioService"):
+			get_node("/root/AudioService").play("care_fail")

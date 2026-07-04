@@ -88,7 +88,8 @@ func _apply_spawn() -> void:
 		"from_town":
 			_human.position = Vector2(48, 236)
 		"from_backyard", "from_yard", "from_graveyard":
-			_human.position = Vector2(240, 270)
+			# Land at south backyard door mat (clear of walls)
+			_human.position = Vector2(240, 275)
 		_:
 			_human.position = Vector2(120, 220)
 
@@ -236,7 +237,8 @@ func _build_actors() -> void:
 	_world.add_child(_human)
 	_human.setup_frames(SpriteFactoryScr.human_frames(), 2.0)  # same scale as town AI
 	_human.setup_collision(false)
-	_human.set_world_bounds(Rect2(22, 40, 436, 250))
+	# Include south backyard door strip (y ~290–300)
+	_human.set_world_bounds(Rect2(22, 40, 436, 265))
 
 	_pet = AnimatedActorScr.new()
 	_pet.is_player_controlled = false
@@ -246,7 +248,7 @@ func _build_actors() -> void:
 	_world.add_child(_pet)
 	_reload_pet_sprites()
 	_pet.setup_collision(true)
-	_pet.set_world_bounds(Rect2(22, 40, 436, 250))
+	_pet.set_world_bounds(Rect2(22, 40, 436, 265))
 
 	# Leash visual (updated by CareDirector)
 	var leash := Line2D.new()
@@ -350,10 +352,13 @@ func _wire_director() -> void:
 	_director.toast.connect(_show_toast)
 	_director.timer_tick.connect(_on_care_timer)
 	_director.timer_done.connect(_on_care_timer_done)
-	_director.choreography_finished.connect(func(_a, _r):
+	_director.choreography_finished.connect(func(a, r):
 		_hide_care_timer()
 		_refresh_all()
 		_apply_pet_condition_visual()
+		var audio := get_node_or_null("/root/AudioService")
+		if audio and audio.has_method("play_care"):
+			audio.play_care(a, bool(r.get("ok", false)) or bool(r.get("applied", false)))
 	)
 	# Resume outdoor leash after town/park visit
 	if PetController.escort_active and _pet and str(PetController.active_pet.life_state if PetController.active_pet else "") != "DEAD":
@@ -692,6 +697,9 @@ func _move_care_cursor(dir: int) -> void:
 		if _action_enabled(str(_care_actions[_care_cursor])):
 			break
 	_refresh_care_cursor()
+	var audio := get_node_or_null("/root/AudioService")
+	if audio and audio.has_method("play"):
+		audio.play("ui_click", 1.0, -12.0)
 
 
 func _refresh_care_cursor() -> void:
@@ -821,6 +829,9 @@ func _open_care_menu() -> void:
 	_refresh_care_cursor()
 	_place_care_menu()
 	_care_panel.visible = true
+	var audio := get_node_or_null("/root/AudioService")
+	if audio and audio.has_method("play_menu"):
+		audio.play_menu()
 	if _human:
 		_human.set_busy(true)
 		_human.play_idle()

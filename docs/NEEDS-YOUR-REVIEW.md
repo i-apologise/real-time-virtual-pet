@@ -1,6 +1,6 @@
 # Needs your review
 
-- **PR #23** — Care juice sparkles, pet mood emotes, clearer care SFX
-  https://github.com/i-apologise/real-time-virtual-pet/pull/23
+- **PR #24** — home feel + park bonuses + care-points shop
+  https://github.com/i-apologise/real-time-virtual-pet/pull/24
 
-(Previously open: PR #21 backyard/audio — check status on GitHub if still relevant.)
+Option A (reactive home) + mix of B (park payoffs, store supplies).

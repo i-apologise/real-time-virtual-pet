@@ -209,11 +209,14 @@ Driven by worst need and zero-hold:
 
 **F8** (+3 days) is the fast path to see death in playtest.
 
-### Sleep
+### Sleep (persists across restarts)
 
 - **SLEEP** starts sleep; **Zzz** shows over the pet.  
+- `sleep_started_unix_utc` is saved and reloaded — sleep is **real-time**, not a session flag.  
 - Hunger/happiness decay **slower** while sleeping; energy **regens**.  
-- Auto-wake when energy is high enough or max sleep duration (~10h).  
+- **Auto-wake** only after **≥ 30 minutes** real sleep **and** energy is high (~95+), or after **max ~10h**.  
+  (Prevents “put to bed with high energy → reopen already awake”.)  
+- You can always **WAKE** manually.  
 - Care that needs an awake pet is blocked until **WAKE**.
 
 ### Care cooldowns (real time)

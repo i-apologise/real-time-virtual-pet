@@ -141,6 +141,16 @@ static func _maybe_auto_wake(pet: PetModel, chunk_end_unix: float) -> void:
 	if pet.life_state == LifeState.DEAD:
 		pet.clear_sleep()
 		return
+	# Use wall-clock span from when sleep started (persists across restarts).
 	var elapsed: float = chunk_end_unix - pet.sleep_started_unix_utc
-	if pet.energy >= SimConfig.AUTO_WAKE_ENERGY or elapsed >= SimConfig.MAX_SLEEP_SEC:
+	if elapsed < 0.0:
+		# Clock anomaly: keep sleeping until clocks make sense
+		return
+	# Hard cap always ends sleep (even if energy still low).
+	if elapsed >= SimConfig.MAX_SLEEP_SEC:
+		pet.clear_sleep()
+		return
+	# Energy-based auto-wake only after minimum rest — otherwise a nearly-full
+	# energy pet "wakes" on the very next catch-up/reload.
+	if elapsed >= SimConfig.MIN_SLEEP_SEC and pet.energy >= SimConfig.AUTO_WAKE_ENERGY:
 		pet.clear_sleep()

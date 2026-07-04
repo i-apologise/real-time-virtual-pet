@@ -57,6 +57,18 @@ func _ready() -> void:
 	call_deferred("boot")
 
 
+func _notification(what: int) -> void:
+	# Persist sleep + needs immediately on quit / background so restarts match wall-clock.
+	if not _booted:
+		return
+	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED:
+		_save_atomic()
+	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_save_atomic()
+	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
+		on_focus_resume()
+
+
 func boot() -> void:
 	if _booted:
 		return

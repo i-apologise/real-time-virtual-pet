@@ -5,6 +5,7 @@ const SpriteFactoryScr = preload("res://src/gameplay/sprite_factory.gd")
 const AnimatedActorScr = preload("res://src/gameplay/animated_actor.gd")
 const CareDirectorScr = preload("res://src/gameplay/care_director.gd")
 const MoodStateMachineScr = preload("res://src/sim/mood_state_machine.gd")
+const NeedsForecastScr = preload("res://src/sim/needs_forecast.gd")
 
 const NEAR_PET_DIST := 56.0
 const LAYER_WORLD := 1
@@ -32,7 +33,12 @@ const DIG_HOLD_SEC := 3.0
 # Top-right needs panel (progress bars — never over the pet)
 var _stats_panel: PanelContainer
 var _stat_bars: Dictionary = {}  # name -> ProgressBar
+var _stat_value_labs: Dictionary = {}  # name -> Label "72"
+var _stat_eta_labs: Dictionary = {}  # name -> Label "hungry in 3h"
 var _stat_title: Label
+var _stat_forecast: Label
+var _prev_stats: Dictionary = {}  # for flash on change
+var _flash_t: Dictionary = {}  # name -> remaining flash sec
 
 # Pokemon-style vertical care menu (bottom-left)
 var _care_panel: PanelContainer
@@ -413,36 +419,68 @@ func _build_hud() -> void:
 	_toast.add_theme_color_override("font_color", Color(1.0, 0.95, 0.45))
 	layer.add_child(_toast)
 
-	# --- Top-right: needs progress bars (never over the pet) ---
+	# --- Top-right: needs bars + numbers + ETAs (never over the pet) ---
 	_stats_panel = PanelContainer.new()
 	_stats_panel.visible = false
 	_stats_panel.add_theme_stylebox_override("panel", _style_panel_light())
 	_stats_panel.position = Vector2(1000, 8)
 	layer.add_child(_stats_panel)
 	var stats_v := VBoxContainer.new()
-	stats_v.add_theme_constant_override("separation", 4)
+	stats_v.add_theme_constant_override("separation", 6)
 	_stats_panel.add_child(stats_v)
 	_stat_title = Label.new()
 	_stat_title.text = "Pet"
 	_stat_title.add_theme_font_size_override("font_size", 14)
 	_stat_title.add_theme_color_override("font_color", Color(0.12, 0.10, 0.08))
 	stats_v.add_child(_stat_title)
+	_stat_forecast = Label.new()
+	_stat_forecast.text = ""
+	_stat_forecast.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_stat_forecast.custom_minimum_size = Vector2(220, 0)
+	_stat_forecast.add_theme_font_size_override("font_size", 11)
+	_stat_forecast.add_theme_color_override("font_color", Color(0.25, 0.22, 0.18))
+	stats_v.add_child(_stat_forecast)
 	_stat_bars.clear()
+	_stat_value_labs.clear()
+	_stat_eta_labs.clear()
+	var eta_hints := {
+		"hunger": "hungry",
+		"energy": "sleepy",
+		"happiness": "lonely",
+		"hygiene": "dirty",
+	}
 	for stat in ["hunger", "energy", "happiness", "hygiene"]:
+		var block := VBoxContainer.new()
+		block.add_theme_constant_override("separation", 1)
+		stats_v.add_child(block)
 		var row := HBoxContainer.new()
-		stats_v.add_child(row)
+		block.add_child(row)
 		var lab := Label.new()
 		lab.text = stat.substr(0, 3).to_upper()
-		lab.custom_minimum_size = Vector2(40, 0)
+		lab.custom_minimum_size = Vector2(36, 0)
 		lab.add_theme_font_size_override("font_size", 12)
 		lab.add_theme_color_override("font_color", Color(0.15, 0.12, 0.10))
 		row.add_child(lab)
 		var bar := ProgressBar.new()
-		bar.custom_minimum_size = Vector2(120, 14)
+		bar.custom_minimum_size = Vector2(110, 16)
 		bar.max_value = 100.0
 		bar.show_percentage = false
 		row.add_child(bar)
 		_stat_bars[stat] = bar
+		var val := Label.new()
+		val.text = "80"
+		val.custom_minimum_size = Vector2(36, 0)
+		val.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		val.add_theme_font_size_override("font_size", 13)
+		val.add_theme_color_override("font_color", Color(0.10, 0.10, 0.12))
+		row.add_child(val)
+		_stat_value_labs[stat] = val
+		var eta := Label.new()
+		eta.text = "  %s in —" % eta_hints[stat]
+		eta.add_theme_font_size_override("font_size", 10)
+		eta.add_theme_color_override("font_color", Color(0.35, 0.32, 0.28))
+		block.add_child(eta)
+		_stat_eta_labs[stat] = eta
 
 	call_deferred("_place_stats_panel")
 
@@ -605,11 +643,11 @@ func _place_care_timer() -> void:
 
 
 func _place_stats_panel() -> void:
-	# Top-right of viewport
+	# Top-right of viewport (wider for numbers + ETAs)
 	if _stats_panel == null:
 		return
 	var vp := get_viewport().get_visible_rect().size
-	_stats_panel.position = Vector2(vp.x - 200, 8)
+	_stats_panel.position = Vector2(vp.x - 260, 8)
 
 
 func _panel(text: String) -> PanelContainer:
@@ -708,6 +746,7 @@ func _at_door(rect: Rect2) -> bool:
 
 func _process(delta: float) -> void:
 	_zzz_t += delta
+	_tick_stat_flashes(delta)
 	_update_near_pet_ui()
 	_update_zzz()
 	_place_stats_panel()
@@ -813,18 +852,7 @@ func _update_near_pet_ui() -> void:
 	if _stats_panel:
 		_stats_panel.visible = show_stats
 	if show_stats and PetController.active_pet:
-		var p = PetController.active_pet
-		var cond := _condition_from_pet(p)
-		if cond == "sleeping":
-			_stat_title.text = "%s  [Zzz sleeping]" % p.name
-		else:
-			_stat_title.text = "%s  [%s]" % [p.name, cond]
-		_stat_bars["hunger"].value = p.hunger
-		_stat_bars["energy"].value = p.energy
-		_stat_bars["happiness"].value = p.happiness
-		_stat_bars["hygiene"].value = p.hygiene
-		for k in _stat_bars:
-			_stat_bars[k].modulate = _bar_color(float(_stat_bars[k].value))
+		_refresh_need_meters(PetController.active_pet)
 
 	# Don't overwrite door hints while standing on a door
 	if _at_door(DOOR_TOWN) or _at_door(DOOR_YARD):
@@ -840,6 +868,71 @@ func _update_near_pet_ui() -> void:
 		_hint.text = "Pet passed — south door to backyard · hold E at plot to dig"
 	else:
 		_hint.text = "Near pet for CARE · left door Town · south door Backyard"
+
+
+func _refresh_need_meters(p) -> void:
+	var cond := _condition_from_pet(p)
+	if cond == "sleeping":
+		_stat_title.text = "%s  [Zzz sleeping]" % p.name
+	else:
+		_stat_title.text = "%s  [%s]" % [p.name, cond]
+
+	var values := {
+		"hunger": float(p.hunger),
+		"energy": float(p.energy),
+		"happiness": float(p.happiness),
+		"hygiene": float(p.hygiene),
+	}
+	for k in values:
+		var v: float = values[k]
+		var prev: float = float(_prev_stats.get(k, v))
+		if absf(v - prev) > 0.4:
+			# Flash bar when care (or decay) changes a need
+			_flash_t[k] = 0.85
+		_prev_stats[k] = v
+		if _stat_bars.has(k):
+			_stat_bars[k].value = v
+			var flash_left: float = float(_flash_t.get(k, 0.0))
+			if flash_left > 0.0 and v > prev:
+				_stat_bars[k].modulate = Color(0.45, 1.0, 0.55)  # green pop up
+			elif flash_left > 0.0 and v < prev:
+				_stat_bars[k].modulate = Color(1.0, 0.75, 0.4)
+			else:
+				_stat_bars[k].modulate = _bar_color(v)
+		if _stat_value_labs.has(k):
+			(_stat_value_labs[k] as Label).text = "%d" % int(round(v))
+
+	# ETAs from species decay rates
+	var fc: Dictionary = NeedsForecastScr.forecast(p)
+	if _stat_forecast:
+		_stat_forecast.text = str(fc.get("summary", ""))
+	if _stat_eta_labs.has("hunger"):
+		var hn: float = float(fc.get("hunger_to_needy_sec", -1.0))
+		(_stat_eta_labs["hunger"] as Label).text = "  hungry in %s" % NeedsForecastScr.format_eta(hn)
+		(_stat_eta_labs["hunger"] as Label).modulate = (
+			Color(1, 0.4, 0.35) if hn >= 0.0 and hn < 3600.0 else Color.WHITE
+		)
+	if _stat_eta_labs.has("energy"):
+		if bool(fc.get("sleeping", false)):
+			var full_in: float = float(fc.get("energy_full_in_sec", -1.0))
+			(_stat_eta_labs["energy"] as Label).text = "  full energy in %s" % NeedsForecastScr.format_eta(full_in)
+		else:
+			var es: float = float(fc.get("energy_to_sleepy_sec", -1.0))
+			(_stat_eta_labs["energy"] as Label).text = "  sleepy in %s" % NeedsForecastScr.format_eta(es)
+			(_stat_eta_labs["energy"] as Label).modulate = (
+				Color(1, 0.55, 0.3) if es >= 0.0 and es < 3600.0 else Color.WHITE
+			)
+	if _stat_eta_labs.has("happiness"):
+		var hp: float = float(fc.get("happiness_to_needy_sec", -1.0))
+		(_stat_eta_labs["happiness"] as Label).text = "  lonely in %s" % NeedsForecastScr.format_eta(hp)
+	if _stat_eta_labs.has("hygiene"):
+		var hy: float = float(fc.get("hygiene_to_needy_sec", -1.0))
+		(_stat_eta_labs["hygiene"] as Label).text = "  dirty in %s" % NeedsForecastScr.format_eta(hy)
+
+
+func _tick_stat_flashes(delta: float) -> void:
+	for k in _flash_t.keys():
+		_flash_t[k] = maxf(0.0, float(_flash_t[k]) - delta)
 
 
 func _bar_color(v: float) -> Color:

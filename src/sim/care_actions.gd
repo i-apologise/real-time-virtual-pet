@@ -49,9 +49,17 @@ static func try_feed(pet: PetModel, now: float) -> Dictionary:
 	pet.hygiene += hygiene_delta
 	pet.happiness += happiness_delta
 	_finish_care(pet, "feed", now)
+	# Report actual applied delta after clamp (UI shows real meter change)
+	var applied_h: float = pet.hunger - hunger_was
 	return _ok(
 		&"feed",
-		{"hunger": hunger_delta, "hygiene": hygiene_delta, "happiness": happiness_delta}
+		{
+			"hunger": applied_h,
+			"hygiene": hygiene_delta,
+			"happiness": happiness_delta,
+			"hunger_before": hunger_was,
+			"hunger_after": pet.hunger,
+		}
 	)
 
 

@@ -362,9 +362,15 @@ func _confirm_adopt() -> void:
 	if r.get("ok", false):
 		_toast.text = "Welcome home, %s!" % _name_edit.text
 		_adopt_panel.visible = false
+		var audio := get_node_or_null("/root/AudioService")
+		if audio and audio.has_method("play"):
+			audio.play("adopt")
 		SceneRouter.go("habitat", "from_town")
 	else:
 		_toast.text = "Adopt failed: %s" % str(r.get("reason", "error"))
+		var audio2 := get_node_or_null("/root/AudioService")
+		if audio2 and audio2.has_method("play"):
+			audio2.play("care_fail")
 
 
 func _process(_delta: float) -> void:

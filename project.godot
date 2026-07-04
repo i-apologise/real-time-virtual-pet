@@ -19,6 +19,7 @@ SaveManager="*res://src/autoload/save_manager.gd"
 PetController="*res://src/autoload/pet_controller.gd"
 SceneRouter="*res://src/autoload/scene_router.gd"
 NotificationPort="*res://src/autoload/notification_port.gd"
+AudioService="*res://src/autoload/audio_service.gd"
 
 [display]
 

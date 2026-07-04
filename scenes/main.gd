@@ -5,6 +5,9 @@ extends Node
 func _ready() -> void:
 	if PetController.has_method("boot"):
 		PetController.boot()
+	var audio := get_node_or_null("/root/AudioService")
+	if audio and audio.has_method("start_ambient"):
+		audio.start_ambient()
 	call_deferred("_route")
 
 

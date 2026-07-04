@@ -49,6 +49,10 @@ func go(scene_id: String, spawn: String = "") -> void:
 		push_warning("SceneRouter: missing scene %s" % scene_id)
 		return
 	pending_spawn = spawn
+	# Door / transition SFX (autoload may be missing in headless unit tests)
+	var audio := get_node_or_null("/root/AudioService")
+	if audio and audio.has_method("play_door"):
+		audio.play_door()
 	var err := get_tree().change_scene_to_file(path)
 	if err != OK:
 		push_warning("SceneRouter: failed to open %s err=%s" % [path, err])

@@ -50,8 +50,11 @@ static func pet_frames(species_id: String) -> SpriteFrames:
 	for anim in ["idle", "hungry", "weak", "happy", "sad", "sleep", "eat", "play", "dead", "walk", "clean"]:
 		sf.add_animation(anim)
 		sf.set_animation_speed(anim, 6.0 if anim != "dead" else 3.0)
-		# dead loops slowly on final rest frames (2–3) for a soft “resting” look
+		# sleep + dead loop as ambient moods; care bites play once
 		sf.set_animation_loop(anim, anim not in ["eat", "clean", "play"])
+		if anim == "sleep":
+			sf.set_animation_speed(anim, 3.0)
+			sf.set_animation_loop(anim, true)
 		if anim == "dead":
 			_add_dead_frames(sf, prefix)
 			continue

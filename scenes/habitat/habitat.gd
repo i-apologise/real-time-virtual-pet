@@ -38,15 +38,21 @@ var _stat_title: Label
 var _care_panel: PanelContainer
 var _care_list: VBoxContainer
 var _care_labels: Array = []  # Label nodes
+var _care_row_panels: Array = []  # PanelContainer per row (selection highlight)
 var _care_actions: Array = ["feed", "walk", "play", "clean", "sleep", "wake", "cancel"]
 var _care_cursor: int = 0
 var _near_pet: bool = false
 var _care_menu_open: bool = false
+var _hud_layer: CanvasLayer
 
 # Care action timer (center-top countdown)
 var _care_timer_panel: PanelContainer
 var _care_timer_label: Label
 var _care_timer_bar: ProgressBar
+
+# Sleep Zzz indicator (world-space label over pet)
+var _zzz: Label
+var _zzz_t: float = 0.0
 
 
 # Door zones (world space)
@@ -273,6 +279,8 @@ func _condition_from_pet(p) -> String:
 	var life := str(p.life_state)
 	if life == "DEAD":
 		return "dead"
+	if p.is_sleeping():
+		return "sleeping"
 	if life == "DYING" or p.hunger <= 0.0 or p.energy <= 5.0:
 		return "weak"
 	if life == "CRITICAL" or p.hunger < 20.0:
@@ -286,21 +294,26 @@ func _apply_pet_condition_visual() -> void:
 	if _pet == null or PetController.active_pet == null:
 		return
 	var cond := _condition_from_pet(PetController.active_pet)
-	_pet.set_condition(cond)
+	# AnimatedActor maps "sleeping" → sleep frames via set_condition
+	if cond == "sleeping":
+		_pet.set_condition("sleep")
+	else:
+		_pet.set_condition(cond)
 	match cond:
 		"dead":
 			_pet.play_anim(&"dead")
+		"sleeping":
+			_pet.play_anim(&"sleep")
 		"weak":
 			_pet.play_anim(&"weak")
 		"hungry":
 			_pet.play_anim(&"hungry")
 		_:
-			if PetController.active_pet.is_sleeping():
-				_pet.play_anim(&"sleep")
-			elif PetController.active_pet.happiness >= 75.0:
+			if PetController.active_pet.happiness >= 75.0:
 				_pet.play_anim(&"happy")
 			else:
 				_pet.play_anim(&"idle")
+	_update_zzz()
 
 
 func _wire_director() -> void:
@@ -336,9 +349,45 @@ func _wire_director() -> void:
 	)
 
 
+func _style_panel_light() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.99, 0.97, 0.90)
+	sb.border_color = Color(0.12, 0.10, 0.08)
+	sb.set_border_width_all(3)
+	sb.set_corner_radius_all(6)
+	sb.content_margin_left = 12
+	sb.content_margin_right = 12
+	sb.content_margin_top = 10
+	sb.content_margin_bottom = 10
+	sb.shadow_color = Color(0, 0, 0, 0.35)
+	sb.shadow_size = 6
+	return sb
+
+
+func _style_row(selected: bool, disabled: bool) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	if selected:
+		sb.bg_color = Color(0.85, 0.18, 0.14)
+		sb.border_color = Color(0.45, 0.05, 0.05)
+	elif disabled:
+		sb.bg_color = Color(0.88, 0.86, 0.82)
+		sb.border_color = Color(0.75, 0.72, 0.68)
+	else:
+		sb.bg_color = Color(0.96, 0.94, 0.88)
+		sb.border_color = Color(0.75, 0.72, 0.65)
+	sb.set_border_width_all(2 if selected else 1)
+	sb.set_corner_radius_all(3)
+	sb.content_margin_left = 8
+	sb.content_margin_right = 8
+	sb.content_margin_top = 4
+	sb.content_margin_bottom = 4
+	return sb
+
+
 func _build_hud() -> void:
 	var layer := CanvasLayer.new()
 	layer.layer = 30
+	_hud_layer = layer
 	add_child(layer)
 
 	# --- Top-left: counter + hints ---
@@ -360,24 +409,23 @@ func _build_hud() -> void:
 
 	_toast = Label.new()
 	_toast.position = Vector2(8, 46)
-	_toast.add_theme_font_size_override("font_size", 12)
-	_toast.modulate = Color(1, 1, 0.6)
+	_toast.add_theme_font_size_override("font_size", 13)
+	_toast.add_theme_color_override("font_color", Color(1.0, 0.95, 0.45))
 	layer.add_child(_toast)
 
 	# --- Top-right: needs progress bars (never over the pet) ---
 	_stats_panel = PanelContainer.new()
 	_stats_panel.visible = false
-	# Anchor top-right-ish for 1280 UI; use fixed pos that works with default window
+	_stats_panel.add_theme_stylebox_override("panel", _style_panel_light())
 	_stats_panel.position = Vector2(1000, 8)
-	# Also set for smaller viewports via set_anchors later if needed
 	layer.add_child(_stats_panel)
 	var stats_v := VBoxContainer.new()
 	stats_v.add_theme_constant_override("separation", 4)
 	_stats_panel.add_child(stats_v)
 	_stat_title = Label.new()
 	_stat_title.text = "Pet"
-	_stat_title.add_theme_font_size_override("font_size", 13)
-	_stat_title.add_theme_color_override("font_color", Color(0.95, 0.95, 0.9))
+	_stat_title.add_theme_font_size_override("font_size", 14)
+	_stat_title.add_theme_color_override("font_color", Color(0.12, 0.10, 0.08))
 	stats_v.add_child(_stat_title)
 	_stat_bars.clear()
 	for stat in ["hunger", "energy", "happiness", "hygiene"]:
@@ -385,9 +433,9 @@ func _build_hud() -> void:
 		stats_v.add_child(row)
 		var lab := Label.new()
 		lab.text = stat.substr(0, 3).to_upper()
-		lab.custom_minimum_size = Vector2(36, 0)
-		lab.add_theme_font_size_override("font_size", 11)
-		lab.add_theme_color_override("font_color", Color(0.9, 0.9, 0.85))
+		lab.custom_minimum_size = Vector2(40, 0)
+		lab.add_theme_font_size_override("font_size", 12)
+		lab.add_theme_color_override("font_color", Color(0.15, 0.12, 0.10))
 		row.add_child(lab)
 		var bar := ProgressBar.new()
 		bar.custom_minimum_size = Vector2(120, 14)
@@ -396,41 +444,58 @@ func _build_hud() -> void:
 		row.add_child(bar)
 		_stat_bars[stat] = bar
 
-	# Place stats panel using full rect margins after layout
 	call_deferred("_place_stats_panel")
 
-	# --- Pokemon-style care menu (bottom-left) ---
+	# --- High-contrast CARE menu (bottom-left) ---
 	_care_panel = PanelContainer.new()
 	_care_panel.visible = false
-	_care_panel.position = Vector2(12, 360)
+	_care_panel.add_theme_stylebox_override("panel", _style_panel_light())
+	_care_panel.position = Vector2(16, 400)
 	layer.add_child(_care_panel)
 	var care_outer := VBoxContainer.new()
-	care_outer.add_theme_constant_override("separation", 2)
+	care_outer.add_theme_constant_override("separation", 4)
 	_care_panel.add_child(care_outer)
 	var care_title := Label.new()
 	care_title.text = "CARE"
-	care_title.add_theme_font_size_override("font_size", 14)
-	care_title.add_theme_color_override("font_color", Color(0.15, 0.15, 0.2))
+	care_title.add_theme_font_size_override("font_size", 18)
+	care_title.add_theme_color_override("font_color", Color(0.10, 0.08, 0.06))
 	care_outer.add_child(care_title)
 	var help := Label.new()
-	help.text = "↑↓  Z/Enter  X/Esc"
-	help.add_theme_font_size_override("font_size", 10)
-	help.add_theme_color_override("font_color", Color(0.35, 0.35, 0.4))
+	help.text = "↑↓ move · Z/Enter · X cancel"
+	help.add_theme_font_size_override("font_size", 11)
+	help.add_theme_color_override("font_color", Color(0.25, 0.22, 0.18))
 	care_outer.add_child(help)
 	_care_list = VBoxContainer.new()
-	_care_list.add_theme_constant_override("separation", 0)
+	_care_list.add_theme_constant_override("separation", 3)
 	care_outer.add_child(_care_list)
 	_care_labels.clear()
+	_care_row_panels.clear()
 	var names := ["FEED", "WALK", "PLAY", "CLEAN", "SLEEP", "WAKE", "CANCEL"]
 	for i in names.size():
+		var row_p := PanelContainer.new()
+		row_p.custom_minimum_size = Vector2(168, 28)
 		var lab2 := Label.new()
-		lab2.add_theme_font_size_override("font_size", 14)
-		lab2.add_theme_color_override("font_color", Color(0.1, 0.1, 0.15))
+		lab2.add_theme_font_size_override("font_size", 16)
+		lab2.add_theme_color_override("font_color", Color(0.08, 0.08, 0.10))
 		lab2.text = "  " + names[i]
-		lab2.custom_minimum_size = Vector2(140, 20)
-		_care_list.add_child(lab2)
+		lab2.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		row_p.add_child(lab2)
+		_care_list.add_child(row_p)
 		_care_labels.append(lab2)
+		_care_row_panels.append(row_p)
 	_refresh_care_cursor()
+	call_deferred("_place_care_menu")
+
+	# World-space Zzz (follows pet when sleeping)
+	_zzz = Label.new()
+	_zzz.text = "Zzz"
+	_zzz.visible = false
+	_zzz.add_theme_font_size_override("font_size", 18)
+	_zzz.add_theme_color_override("font_color", Color(0.55, 0.75, 1.0))
+	_zzz.add_theme_color_override("font_outline_color", Color(0.05, 0.08, 0.15))
+	_zzz.add_theme_constant_override("outline_size", 4)
+	_zzz.z_index = 200
+	_world.add_child(_zzz)
 
 	# Nav shortcuts (doors still preferred)
 	var nav := HBoxContainer.new()
@@ -485,6 +550,7 @@ func _build_hud() -> void:
 	# --- Care timer (center-top) ---
 	_care_timer_panel = PanelContainer.new()
 	_care_timer_panel.visible = false
+	_care_timer_panel.add_theme_stylebox_override("panel", _style_panel_light())
 	_care_timer_panel.position = Vector2(520, 8)
 	layer.add_child(_care_timer_panel)
 	var timer_v := VBoxContainer.new()
@@ -558,16 +624,80 @@ func _panel(text: String) -> PanelContainer:
 	return p
 
 
+func _action_enabled(action: String) -> bool:
+	var p = PetController.active_pet
+	if p == null or str(p.life_state) == "DEAD":
+		return action == "cancel"
+	if action == "cancel":
+		return true
+	if p.is_sleeping():
+		return action == "wake"  # only wake while sleeping
+	if action == "wake":
+		return false
+	return true
+
+
+func _move_care_cursor(dir: int) -> void:
+	## Skip greyed-out actions so the highlight always lands on something usable.
+	var n := _care_actions.size()
+	if n == 0:
+		return
+	for _i in n:
+		_care_cursor = (_care_cursor + dir + n) % n
+		if _action_enabled(str(_care_actions[_care_cursor])):
+			break
+	_refresh_care_cursor()
+
+
 func _refresh_care_cursor() -> void:
 	var names := ["FEED", "WALK", "PLAY", "CLEAN", "SLEEP", "WAKE", "CANCEL"]
 	for i in _care_labels.size():
 		var lab: Label = _care_labels[i]
-		if i == _care_cursor:
+		var action: String = str(_care_actions[i])
+		var enabled := _action_enabled(action)
+		var selected := i == _care_cursor
+		if selected:
 			lab.text = "▶ " + names[i]
-			lab.add_theme_color_override("font_color", Color(0.85, 0.15, 0.15))
+			lab.add_theme_color_override("font_color", Color(1.0, 1.0, 0.95))
+			lab.add_theme_font_size_override("font_size", 17)
+		elif not enabled:
+			lab.text = "  " + names[i]
+			lab.add_theme_color_override("font_color", Color(0.55, 0.52, 0.48))
+			lab.add_theme_font_size_override("font_size", 15)
 		else:
 			lab.text = "  " + names[i]
-			lab.add_theme_color_override("font_color", Color(0.12, 0.12, 0.16))
+			lab.add_theme_color_override("font_color", Color(0.08, 0.08, 0.10))
+			lab.add_theme_font_size_override("font_size", 16)
+		if i < _care_row_panels.size():
+			var row: PanelContainer = _care_row_panels[i]
+			row.add_theme_stylebox_override("panel", _style_row(selected, not enabled))
+
+
+func _place_care_menu() -> void:
+	if _care_panel == null:
+		return
+	var vp := get_viewport().get_visible_rect().size
+	# Bottom-left, always on screen
+	_care_panel.position = Vector2(16.0, maxf(80.0, vp.y - 320.0))
+
+
+func _update_zzz() -> void:
+	if _zzz == null or _pet == null:
+		return
+	var sleeping := (
+		PetController.active_pet != null
+		and PetController.active_pet.is_sleeping()
+		and str(PetController.active_pet.life_state) != "DEAD"
+	)
+	_zzz.visible = sleeping and _pet.visible
+	if not sleeping:
+		return
+	# Bobbing Zzz above pet head
+	var bob := sin(_zzz_t * 3.0) * 3.0
+	_zzz.global_position = _pet.global_position + Vector2(-10, -42 + bob)
+	# Cycle Z / Zz / Zzz for a cheap animation read
+	var phase := int(_zzz_t * 2.0) % 3
+	_zzz.text = ["Z", "Zz", "Zzz"][phase]
 
 
 func _at_door(rect: Rect2) -> bool:
@@ -577,8 +707,12 @@ func _at_door(rect: Rect2) -> bool:
 
 
 func _process(delta: float) -> void:
+	_zzz_t += delta
 	_update_near_pet_ui()
+	_update_zzz()
 	_place_stats_panel()
+	if _care_menu_open:
+		_place_care_menu()
 	# Door proximity hints (backyard is attached to home)
 	if _human and not _care_menu_open and not (_director and _director.is_busy()):
 		if _at_door(DOOR_TOWN):
@@ -616,17 +750,24 @@ func _open_care_menu() -> void:
 		return
 	var life := str(PetController.active_pet.life_state)
 	if life == "DEAD":
-		_show_toast("Take them to the backyard Graveyard to dig")
+		_show_toast("Take them out the back door to the backyard")
 		return
 	_care_menu_open = true
-	_care_cursor = 0
+	# Default to WAKE when sleeping; FEED when awake
+	if PetController.active_pet.is_sleeping():
+		_care_cursor = _care_actions.find("wake")
+		if _care_cursor < 0:
+			_care_cursor = 0
+		_show_toast("They're sleeping (Zzz) — choose WAKE, or X to close")
+	else:
+		_care_cursor = 0
+		_show_toast("↑↓ select · Z/Enter confirm · X cancel")
 	_refresh_care_cursor()
+	_place_care_menu()
 	_care_panel.visible = true
-	# Freeze player while menu open (Pokemon-style)
 	if _human:
 		_human.set_busy(true)
 		_human.play_idle()
-	_show_toast("↑↓ select · Z/Enter/E confirm · X/Esc cancel")
 
 
 func _confirm_care_selection() -> void:
@@ -637,6 +778,14 @@ func _confirm_care_selection() -> void:
 		_close_care_menu()
 		if _human and (_director == null or not _director.is_busy()):
 			_human.set_busy(false)
+		return
+	if not _action_enabled(action):
+		if PetController.active_pet and PetController.active_pet.is_sleeping():
+			_show_toast("Zzz… wake them first — pick WAKE")
+		elif action == "wake":
+			_show_toast("They're already awake")
+		else:
+			_show_toast("Can't do that right now")
 		return
 	_on_care(StringName(action))
 
@@ -665,7 +814,11 @@ func _update_near_pet_ui() -> void:
 		_stats_panel.visible = show_stats
 	if show_stats and PetController.active_pet:
 		var p = PetController.active_pet
-		_stat_title.text = "%s  [%s]" % [p.name, _condition_from_pet(p)]
+		var cond := _condition_from_pet(p)
+		if cond == "sleeping":
+			_stat_title.text = "%s  [Zzz sleeping]" % p.name
+		else:
+			_stat_title.text = "%s  [%s]" % [p.name, cond]
 		_stat_bars["hunger"].value = p.hunger
 		_stat_bars["energy"].value = p.energy
 		_stat_bars["happiness"].value = p.happiness
@@ -677,7 +830,10 @@ func _update_near_pet_ui() -> void:
 	if _at_door(DOOR_TOWN) or _at_door(DOOR_YARD):
 		return
 	if _near_pet and life != "DEAD" and life != "":
-		_hint.text = "Near %s — E open CARE · ↑↓ · Z/Enter" % str(PetController.active_pet.name)
+		if PetController.active_pet.is_sleeping():
+			_hint.text = "%s is sleeping (Zzz) — E CARE · WAKE to feed/play" % str(PetController.active_pet.name)
+		else:
+			_hint.text = "Near %s — E open CARE · ↑↓ · Z/Enter" % str(PetController.active_pet.name)
 	elif PetController.active_pet == null:
 		_hint.text = "Adopt a pet · WASD · left door=Town · south door=Backyard"
 	elif life == "DEAD":
@@ -708,12 +864,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				_human.set_busy(false)
 			return
 		if k.keycode == KEY_UP or k.keycode == KEY_W:
-			_care_cursor = (_care_cursor - 1 + _care_actions.size()) % _care_actions.size()
-			_refresh_care_cursor()
+			_move_care_cursor(-1)
 			return
 		if k.keycode == KEY_DOWN or k.keycode == KEY_S:
-			_care_cursor = (_care_cursor + 1) % _care_actions.size()
-			_refresh_care_cursor()
+			_move_care_cursor(1)
 			return
 		if k.keycode == KEY_ENTER or k.keycode == KEY_KP_ENTER or k.keycode == KEY_Z or k.keycode == KEY_SPACE:
 			_confirm_care_selection()
@@ -743,7 +897,14 @@ func _on_care(action: StringName) -> void:
 		_close_care_menu()
 		return
 	if _director and _director.is_busy():
-		_show_toast("…")
+		_show_toast("Still busy — wait a second")
+		return
+	# Pre-check so we never run a full walk then fail with PET_SLEEPING
+	if not _action_enabled(String(action)):
+		if PetController.active_pet and PetController.active_pet.is_sleeping():
+			_show_toast("Zzz… wake them first — pick WAKE")
+		else:
+			_show_toast("Can't do that right now")
 		return
 	# Release menu freeze so care walk can run
 	_care_menu_open = false
@@ -753,7 +914,10 @@ func _on_care(action: StringName) -> void:
 		_human.set_busy(false)
 	var r: Dictionary = _director.try_start_care(action)
 	if not r.get("ok", false):
-		_show_toast(str(r.get("reason", "no")))
+		var msg := str(r.get("message", ""))
+		if msg == "":
+			msg = str(r.get("reason", "Couldn't do that"))
+		_show_toast(msg)
 		if _human and not _director.is_busy():
 			_human.set_busy(false)
 

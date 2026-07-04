@@ -49,10 +49,11 @@ static func pet_frames(species_id: String) -> SpriteFrames:
 	var sf := SpriteFrames.new()
 	for anim in ["idle", "hungry", "weak", "happy", "sad", "sleep", "eat", "play", "dead", "walk", "clean"]:
 		sf.add_animation(anim)
-		sf.set_animation_speed(anim, 6.0 if anim != "dead" else 1.0)
-		sf.set_animation_loop(anim, anim not in ["dead", "eat", "clean", "play"])
+		sf.set_animation_speed(anim, 6.0 if anim != "dead" else 3.0)
+		# dead loops slowly on final rest frames (2–3) for a soft “resting” look
+		sf.set_animation_loop(anim, anim not in ["eat", "clean", "play"])
 		if anim == "dead":
-			sf.add_frame(anim, _load("%s_dead_0.png" % prefix))
+			_add_dead_frames(sf, prefix)
 			continue
 		# action-specific slime frames when available
 		if prefix == "slime" and anim in ["eat", "play", "clean", "sleep"]:
@@ -86,6 +87,37 @@ static func pet_frames(species_id: String) -> SpriteFrames:
 		for i in 2:
 			sf.add_frame(anim, _load("%s_%s_%d.png" % [prefix, file_anim, i]))
 	return sf
+
+
+static func _add_dead_frames(sf: SpriteFrames, prefix: String) -> void:
+	## Limp sequence 0→1 then rest on 2/3 (X-eyes + optional spirit).
+	sf.set_animation_speed("dead", 4.0)
+	sf.set_animation_loop("dead", true)
+	var frames: Array = []
+	for i in 4:
+		var path := "%s_dead_%d.png" % [prefix, i]
+		frames.append(_load(path))
+	# play-through limp once in the loop pattern: 0,1,2,3,2,3
+	sf.add_frame("dead", frames[0], 1.2)
+	sf.add_frame("dead", frames[1], 1.2)
+	sf.add_frame("dead", frames[2], 1.6)
+	sf.add_frame("dead", frames[3], 1.6)
+	sf.add_frame("dead", frames[2], 1.4)
+	sf.add_frame("dead", frames[3], 1.4)
+
+
+static func prop_texture(kind: String) -> Texture2D:
+	match kind:
+		"human_bed":
+			return _load("prop_human_bed.png")
+		"pet_bed":
+			return _load("prop_pet_bed.png")
+		"bowl":
+			return _load("prop_bowl.png")
+		"rug":
+			return _load("prop_rug.png")
+		_:
+			return _load("prop_bowl.png")
 
 
 static func make_tile(kind: String) -> Texture2D:

@@ -1,5 +1,6 @@
 extends Node2D
 ## Pokemon-style town: grass tiles, solid buildings, sprite human, AI walkers.
+## House front door → home. Backyard is NOT a separate town building — use house back door.
 
 const SpriteFactoryScr = preload("res://src/gameplay/sprite_factory.gd")
 const AnimatedActorScr = preload("res://src/gameplay/animated_actor.gd")
@@ -17,6 +18,20 @@ var _pois: Array = []
 func _ready() -> void:
 	y_sort_enabled = true
 	_build_world()
+	_apply_spawn()
+
+
+func _apply_spawn() -> void:
+	if _human == null:
+		return
+	var spawn := SceneRouter.take_spawn("default")
+	match spawn:
+		"from_house":
+			_human.position = Vector2(232, 248)
+		"from_store":
+			_human.position = Vector2(396, 190)
+		_:
+			_human.position = Vector2(232, 248)
 
 
 func _tile_rect(area: Rect2, kind: String) -> void:
@@ -35,7 +50,7 @@ func _tile_rect(area: Rect2, kind: String) -> void:
 		y += 16
 
 
-func _solid(rect: Rect2, color: Color, title: String = "", scene_id: String = "") -> void:
+func _solid(rect: Rect2, color: Color, title: String = "", scene_id: String = "", spawn: String = "") -> void:
 	var body := StaticBody2D.new()
 	body.position = rect.position + rect.size * 0.5
 	body.collision_layer = LAYER_WORLD
@@ -58,6 +73,13 @@ func _solid(rect: Rect2, color: Color, title: String = "", scene_id: String = ""
 	roof.color = color.darkened(0.22)
 	roof.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	body.add_child(roof)
+	# door stripe
+	var door := ColorRect.new()
+	door.size = Vector2(14, 18)
+	door.position = Vector2(-7, rect.size.y * 0.5 - 18)
+	door.color = Color("4A3020")
+	door.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	body.add_child(door)
 	if title != "":
 		var lab := Label.new()
 		lab.text = title
@@ -66,12 +88,13 @@ func _solid(rect: Rect2, color: Color, title: String = "", scene_id: String = ""
 		lab.add_theme_color_override("font_color", Color.WHITE)
 		body.add_child(lab)
 	_world.add_child(body)
-	# Interact point in front of building (south doorstep)
-	_pois.append({
-		"pos": body.position + Vector2(0, rect.size.y * 0.5 + 14),
-		"title": title,
-		"scene_id": scene_id,
-	})
+	if scene_id != "":
+		_pois.append({
+			"pos": body.position + Vector2(0, rect.size.y * 0.5 + 14),
+			"title": title,
+			"scene_id": scene_id,
+			"spawn": spawn,
+		})
 
 
 func _build_world() -> void:
@@ -81,13 +104,27 @@ func _build_world() -> void:
 
 	_tile_rect(Rect2(0, 0, 640, 400), "grass")
 	_tile_rect(Rect2(40, 220, 560, 48), "path")
+	# path from house side toward where backyard "would be" (hint only)
+	_tile_rect(Rect2(250, 160, 32, 64), "path")
 
-	_solid(Rect2(200, 160, 64, 52), Color("C48C5C"), "House", "habitat")
-	_solid(Rect2(360, 100, 72, 56), Color("5B8DEE"), "Store", "pet_store")
-	_solid(Rect2(80, 100, 80, 48), Color("3DAA55"), "Park", "habitat")
-	_solid(Rect2(480, 180, 72, 52), Color("6B6B70"), "Backyard", "graveyard")
-	_solid(Rect2(40, 240, 56, 48), Color("8E6E7A"), "AI A", "")
-	_solid(Rect2(540, 90, 56, 48), Color("8E6E7A"), "AI B", "")
+	# Home (front door only — backyard is via house interior south door)
+	_solid(Rect2(200, 150, 72, 56), Color("C48C5C"), "Your House", "habitat", "from_town")
+	# Pet store
+	_solid(Rect2(360, 100, 72, 56), Color("5B8DEE"), "Pet Store", "pet_store", "from_town")
+	# Park — scenic only (no wrong teleport)
+	_solid(Rect2(80, 100, 80, 48), Color("3DAA55"), "Park", "", "")
+	# Neighbor houses (no enter)
+	_solid(Rect2(40, 240, 56, 48), Color("8E6E7A"), "Neighbor", "", "")
+	_solid(Rect2(540, 90, 56, 48), Color("8E6E7A"), "Neighbor", "", "")
+
+	# Sign near house: backyard via home
+	var sign := Label.new()
+	sign.text = "Backyard → go inside house, south door"
+	sign.position = Vector2(180, 220)
+	sign.add_theme_font_size_override("font_size", 10)
+	sign.add_theme_color_override("font_color", Color(0.95, 0.95, 0.85))
+	sign.z_index = -10
+	_world.add_child(sign)
 
 	# Map bounds
 	_solid(Rect2(-16, 0, 16, 400), Color(0, 0, 0, 0))
@@ -99,13 +136,13 @@ func _build_world() -> void:
 	_human.is_player_controlled = true
 	_human.is_pet = false
 	_human.move_speed = 105.0
-	_human.position = Vector2(232, 240)
+	_human.position = Vector2(232, 248)
 	_world.add_child(_human)
 	_human.setup_frames(SpriteFactoryScr.human_frames(), 2.0)
 	_human.setup_collision(false)
 
 	var cam := Camera2D.new()
-	cam.zoom = Vector2(2.5, 2.5)
+	cam.zoom = Vector2(2.3, 2.3)
 	cam.position_smoothing_enabled = true
 	cam.position_smoothing_speed = 7.0
 	_human.add_child(cam)
@@ -128,7 +165,7 @@ func _build_world() -> void:
 	_label.position = Vector2(8, 6)
 	_label.add_theme_font_size_override("font_size", 12)
 	_label.add_theme_color_override("font_color", Color.WHITE)
-	_label.text = "Town — WASD · walk to a doorstep · E enter (can't walk through buildings)"
+	_label.text = "Town — WASD · doorstep + E · backyard is through Your House"
 	layer.add_child(_label)
 
 
@@ -137,14 +174,16 @@ func _process(_delta: float) -> void:
 		return
 	var near := ""
 	var scene_id := ""
+	var spawn := ""
 	for poi in _pois:
 		if _human.global_position.distance_to(poi["pos"]) <= POI_RADIUS:
 			near = str(poi["title"])
 			scene_id = str(poi["scene_id"])
+			spawn = str(poi.get("spawn", ""))
 			break
 	if near != "":
 		_label.text = "Near %s — press E" % near
 		if scene_id != "" and Input.is_action_just_pressed("interact"):
-			SceneRouter.go(scene_id)
+			SceneRouter.go(scene_id, spawn)
 	else:
-		_label.text = "Town — WASD · doorsteps · E enter · solid buildings & AI"
+		_label.text = "Town — doorsteps + E · House back door = backyard (inside home)"

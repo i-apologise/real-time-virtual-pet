@@ -49,10 +49,16 @@ var _care_timer_label: Label
 var _care_timer_bar: ProgressBar
 
 
+# Door zones (world space)
+const DOOR_TOWN := Rect2(0, 210, 36, 56)       # left wall → town
+const DOOR_YARD := Rect2(200, 290, 80, 30)      # south mat → backyard
+
+
 func _ready() -> void:
 	y_sort_enabled = true
 	_build_room()
 	_build_actors()
+	_apply_spawn()
 	_build_hud()
 	_wire_director()
 	if not EventBus.pet_updated.is_connected(_on_pet_updated):
@@ -60,6 +66,19 @@ func _ready() -> void:
 	if not EventBus.profile_updated.is_connected(_on_profile):
 		EventBus.profile_updated.connect(_on_profile)
 	_refresh_all()
+
+
+func _apply_spawn() -> void:
+	if _human == null:
+		return
+	var spawn := SceneRouter.take_spawn("default")
+	match spawn:
+		"from_town":
+			_human.position = Vector2(48, 236)
+		"from_backyard", "from_yard", "from_graveyard":
+			_human.position = Vector2(240, 270)
+		_:
+			_human.position = Vector2(120, 220)
 
 
 func _add_static_rect(rect: Rect2, color: Color, z: int = 0) -> void:
@@ -112,14 +131,15 @@ func _add_decor_rect(rect: Rect2, color: Color, z: int = -80) -> ColorRect:
 	return r
 
 
-func _add_decor_label(text: String, pos: Vector2, color: Color = Color(0.25, 0.22, 0.2)) -> void:
-	var lab := Label.new()
-	lab.text = text
-	lab.position = pos
-	lab.add_theme_font_size_override("font_size", 10)
-	lab.add_theme_color_override("font_color", color)
-	lab.z_index = -70
-	_world.add_child(lab)
+func _add_prop_sprite(tex: Texture2D, pos: Vector2, scale_mul: float = 2.0, z: int = -80) -> void:
+	var spr := Sprite2D.new()
+	spr.texture = tex
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	spr.centered = true
+	spr.position = pos
+	spr.scale = Vector2(scale_mul, scale_mul)
+	spr.z_index = z
+	_world.add_child(spr)
 
 
 func _build_room() -> void:
@@ -129,43 +149,63 @@ func _build_room() -> void:
 	add_child(_world)
 
 	_tile_floor(Rect2(0, 0, 480, 320), "floor")
-	# walls (solid)
-	_add_static_rect(Rect2(0, 0, 480, 28), Color("E8DCC8"), -50)
-	_add_static_rect(Rect2(0, 0, 14, 320), Color("D8CCB8"))
-	_add_static_rect(Rect2(466, 0, 14, 320), Color("D8CCB8"))
-	_add_static_rect(Rect2(0, 306, 480, 14), Color("C8BCA8"))
+	# wallpaper strip under top wall
+	_tile_floor(Rect2(14, 28, 452, 32), "wall")
+	# walls (solid) — leave door gaps on west + south
+	_add_static_rect(Rect2(0, 0, 480, 28), Color("D4C4A8"), -50)
+	# left wall with town door gap (y 210–266)
+	_add_static_rect(Rect2(0, 0, 14, 210), Color("C8B898"))
+	_add_static_rect(Rect2(0, 266, 14, 54), Color("C8B898"))
+	_add_static_rect(Rect2(466, 0, 14, 320), Color("C8B898"))
+	# bottom wall with backyard door gap (x 200–280)
+	_add_static_rect(Rect2(0, 306, 200, 14), Color("B8A888"))
+	_add_static_rect(Rect2(280, 306, 200, 14), Color("B8A888"))
 
-	# --- Human bed (left) — visual only; thin headboard collides ---
-	_add_decor_rect(Rect2(36, 48, 80, 52), Color("4A6A7A"), -85)  # frame
-	_add_decor_rect(Rect2(40, 54, 72, 40), Color("6B9BB0"), -84)  # mattress
-	_add_decor_rect(Rect2(44, 56, 24, 14), Color("F2F0E8"), -83)  # pillow
-	_add_decor_rect(Rect2(48, 72, 56, 18), Color("C45C4A"), -83)  # blanket
-	_add_static_rect(Rect2(36, 44, 80, 8), Color("3A4A52"), -50)  # headboard only
-	_add_decor_label("Your bed", Vector2(48, 102), Color(0.85, 0.88, 0.9))
+	# Windows on north wall
+	_add_decor_rect(Rect2(120, 32, 36, 22), Color("7EC8E8"), -88)
+	_add_decor_rect(Rect2(124, 36, 12, 14), Color("E8F8FF"), -87)
+	_add_decor_rect(Rect2(140, 36, 12, 14), Color("D0F0FF"), -87)
+	_add_decor_rect(Rect2(280, 32, 36, 22), Color("7EC8E8"), -88)
+	_add_decor_rect(Rect2(284, 36, 12, 14), Color("E8F8FF"), -87)
+	_add_decor_rect(Rect2(300, 36, 12, 14), Color("D0F0FF"), -87)
 
-	# --- Bathroom (top-right) — floor is walkable; fixtures are small solids ---
+	# --- Human bed (layered blocks + pixel prop on top) ---
+	_add_decor_rect(Rect2(40, 48, 76, 48), Color("5A4030"), -90)
+	_add_decor_rect(Rect2(44, 52, 68, 40), Color("6BA0B8"), -89)
+	_add_decor_rect(Rect2(48, 54, 22, 14), Color("F5F2EA"), -88)
+	_add_decor_rect(Rect2(52, 70, 52, 18), Color("C45C4A"), -88)
+	_add_static_rect(Rect2(38, 42, 80, 10), Color("3A4A52"), -50)  # headboard solid
+	_add_prop_sprite(SpriteFactoryScr.prop_texture("human_bed"), Vector2(78, 74), 2.0, -84)
+
+	# --- Bathroom (top-right) — walkable tiles; small fixtures ---
 	_tile_floor(Rect2(352, 32, 104, 88), "bath_tile")
-	_add_static_rect(Rect2(404, 40, 28, 22), Color("E8EEF2"))  # toilet base
-	_add_decor_rect(Rect2(408, 36, 20, 10), Color("F5F8FA"), -74)  # seat lid
+	_add_static_rect(Rect2(404, 40, 28, 22), Color("E8EEF2"))  # toilet
+	_add_decor_rect(Rect2(408, 36, 20, 10), Color("F5F8FA"), -74)
 	_add_static_rect(Rect2(360, 40, 30, 18), Color("7EC8E0"))  # sink
-	_add_decor_rect(Rect2(366, 44, 18, 8), Color("A8E0F0"), -74)  # basin water
-	_add_decor_label("Bath", Vector2(388, 112), Color(0.15, 0.28, 0.38))
+	_add_decor_rect(Rect2(366, 44, 18, 8), Color("A8E0F0"), -74)
+	# bath partition line
+	_add_decor_rect(Rect2(348, 32, 4, 90), Color("A0B8C0"), -86)
 
-	# --- Pet bed (cushion, walkable) ---
-	_add_decor_rect(Rect2(278, 158, 68, 40), Color("8B5A3C"), -88)  # outer rim
-	_add_decor_rect(Rect2(284, 164, 56, 28), Color("E8B888"), -87)  # cushion
-	_add_decor_rect(Rect2(292, 170, 40, 16), Color("F0D0A8"), -86)  # soft center
-	_add_decor_label("Pet bed", Vector2(288, 200), Color(0.55, 0.4, 0.28))
+	# --- Pet bed + bowl (pixel props) ---
+	_add_prop_sprite(SpriteFactoryScr.prop_texture("pet_bed"), Vector2(312, 180), 2.0, -88)
+	_add_prop_sprite(SpriteFactoryScr.prop_texture("bowl"), Vector2(258, 188), 1.6, -80)
 
-	# --- Food bowl ---
-	_add_decor_rect(Rect2(248, 176, 26, 16), Color("C4A060"), -80)
-	_add_decor_rect(Rect2(252, 178, 18, 10), Color("F5D76E"), -79)
-	_add_decor_label("Bowl", Vector2(248, 194), Color(0.4, 0.35, 0.2))
+	# Center rug
+	_add_prop_sprite(SpriteFactoryScr.prop_texture("rug"), Vector2(208, 232), 2.0, -92)
 
-	# Door frame (leave gap)
-	_add_static_rect(Rect2(0, 200, 18, 20), Color("6E4B2E"))
-	_add_static_rect(Rect2(0, 268, 18, 40), Color("6E4B2E"))
-	_add_decor_rect(Rect2(160, 200, 96, 64), Color("A93226"), -92)  # rug
+	# Town door (left) — mat + frame
+	_add_decor_rect(Rect2(0, 212, 16, 52), Color("5A3A22"), -70)
+	_add_decor_rect(Rect2(2, 216, 12, 44), Color("8B5A2B"), -69)
+	_add_decor_rect(Rect2(12, 232, 4, 8), Color("D4AF37"), -68)  # knob
+	_add_decor_rect(Rect2(14, 255, 22, 10), Color("6B4B2E"), -91)  # door mat
+
+	# Backyard door (south) — connected to home yard
+	_add_decor_rect(Rect2(208, 300, 64, 20), Color("5A3A22"), -70)
+	_add_decor_rect(Rect2(212, 302, 56, 16), Color("3D7A3A"), -69)  # green hint = yard
+	_add_decor_rect(Rect2(220, 288, 40, 14), Color("8B6914"), -91)  # doormat
+
+	# Soft floor accent near bed
+	_add_decor_rect(Rect2(40, 100, 72, 8), Color(0.85, 0.78, 0.65, 0.35), -93)
 
 	_day_overlay = ColorRect.new()
 	_day_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -205,8 +245,8 @@ func _build_actors() -> void:
 	set_meta("leash_line", leash)
 
 	_camera = Camera2D.new()
-	_camera.zoom = Vector2(2.5, 2.5)
-	_camera.position = Vector2(0, -8)
+	_camera.zoom = Vector2(2.15, 2.15)  # show more of the room
+	_camera.position = Vector2(0, -6)
 	_human.add_child(_camera)
 	_camera.make_current()
 	_camera.limit_left = 0
@@ -392,16 +432,25 @@ func _build_hud() -> void:
 		_care_labels.append(lab2)
 	_refresh_care_cursor()
 
-	# Nav top
+	# Nav shortcuts (doors still preferred)
 	var nav := HBoxContainer.new()
 	nav.position = Vector2(8, 68)
 	layer.add_child(nav)
-	for item in [["Town", "town"], ["Store", "pet_store"], ["Yard", "graveyard"]]:
-		var b := Button.new()
-		b.text = item[0]
-		b.add_theme_font_size_override("font_size", 11)
-		b.pressed.connect(func(): SceneRouter.go(item[1]))
-		nav.add_child(b)
+	var b_town := Button.new()
+	b_town.text = "Town door"
+	b_town.add_theme_font_size_override("font_size", 11)
+	b_town.pressed.connect(func(): SceneRouter.go("town", "from_house"))
+	nav.add_child(b_town)
+	var b_yard := Button.new()
+	b_yard.text = "Backyard"
+	b_yard.add_theme_font_size_override("font_size", 11)
+	b_yard.pressed.connect(func(): SceneRouter.go("graveyard", "from_house"))
+	nav.add_child(b_yard)
+	var b_store := Button.new()
+	b_store.text = "Store"
+	b_store.add_theme_font_size_override("font_size", 11)
+	b_store.pressed.connect(func(): SceneRouter.go("pet_store", "from_town"))
+	nav.add_child(b_store)
 
 	_empty_panel = _panel("No pet yet — adopt to begin.")
 	var adopt := Button.new()
@@ -416,10 +465,10 @@ func _build_hud() -> void:
 	layer.add_child(_empty_panel)
 	_empty_panel.position = Vector2(150, 100)
 
-	_death_panel = _panel("Your pet has died. Carry them to the backyard graveyard to dig a grave.")
+	_death_panel = _panel("Your pet has passed. Use the back door (south) into your backyard to dig a grave.")
 	var go_yard := Button.new()
-	go_yard.text = "Go to Graveyard"
-	go_yard.pressed.connect(func(): SceneRouter.go("graveyard"))
+	go_yard.text = "Open backyard door"
+	go_yard.pressed.connect(func(): SceneRouter.go("graveyard", "from_house"))
 	_death_panel.get_child(0).add_child(go_yard)
 	layer.add_child(_death_panel)
 	_death_panel.position = Vector2(150, 100)
@@ -521,18 +570,35 @@ func _refresh_care_cursor() -> void:
 			lab.add_theme_color_override("font_color", Color(0.12, 0.12, 0.16))
 
 
+func _at_door(rect: Rect2) -> bool:
+	if _human == null:
+		return false
+	return rect.has_point(_human.position)
+
+
 func _process(delta: float) -> void:
 	_update_near_pet_ui()
 	_place_stats_panel()
-	# burial dig is only in graveyard scene
-	# E: care menu near pet; else town door
+	# Door proximity hints (backyard is attached to home)
+	if _human and not _care_menu_open and not (_director and _director.is_busy()):
+		if _at_door(DOOR_TOWN):
+			_hint.text = "Town door — press E to leave home"
+		elif _at_door(DOOR_YARD):
+			_hint.text = "Backyard door — press E (graveyard is behind the house)"
 	if Input.is_action_just_pressed("interact"):
 		if _care_menu_open:
 			_confirm_care_selection()
-		elif _near_pet and PetController.active_pet != null and str(PetController.active_pet.life_state) != "DEAD":
+			return
+		if _at_door(DOOR_TOWN):
+			SceneRouter.go("town", "from_house")
+			return
+		if _at_door(DOOR_YARD):
+			SceneRouter.go("graveyard", "from_house")
+			return
+		if _near_pet and PetController.active_pet != null and str(PetController.active_pet.life_state) != "DEAD":
 			_open_care_menu()
-		elif _human and _human.position.x < 40.0 and _human.position.y > 200.0:
-			SceneRouter.go("town")
+		elif _near_pet and PetController.active_pet != null and str(PetController.active_pet.life_state) == "DEAD":
+			_show_toast("Take them out the back door to the backyard")
 
 
 func _close_care_menu() -> void:
@@ -607,14 +673,17 @@ func _update_near_pet_ui() -> void:
 		for k in _stat_bars:
 			_stat_bars[k].modulate = _bar_color(float(_stat_bars[k].value))
 
+	# Don't overwrite door hints while standing on a door
+	if _at_door(DOOR_TOWN) or _at_door(DOOR_YARD):
+		return
 	if _near_pet and life != "DEAD" and life != "":
 		_hint.text = "Near %s — E open CARE · ↑↓ · Z/Enter" % str(PetController.active_pet.name)
 	elif PetController.active_pet == null:
-		_hint.text = "Adopt a pet · WASD · E at door for town"
+		_hint.text = "Adopt a pet · WASD · left door=Town · south door=Backyard"
 	elif life == "DEAD":
-		_hint.text = "Your pet has passed — go to the Graveyard (Yard) to dig"
+		_hint.text = "Pet passed — south door to backyard · hold E at plot to dig"
 	else:
-		_hint.text = "Walk near pet · E for CARE menu · WASD"
+		_hint.text = "Near pet for CARE · left door Town · south door Backyard"
 
 
 func _bar_color(v: float) -> Color:

@@ -22,3 +22,4 @@
 
 | 2026-07-03T10:52Z | Watchdog: open **PR #11** lifelike sprites. A–E + #9/#10 merged on main. No new feature work. Awaiting user merge of #11. |
 | 2026-07-03T10:52Z | Watchdog: **PR #11** CI green, mergeable. A–E complete on main. Awaiting user merge. |
+| 2026-07-03 | **Playtest checkpoint:** ship-and-play OK. Full review + polish backlog → `docs/PLAYTEST-REVIEW-2026-07.md` (shots in `docs/playtest-review/`). Next: habitat furniture/UI polish, not more systems. PR #16 care rooms. |

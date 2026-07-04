@@ -75,9 +75,10 @@ func set_condition(condition: String) -> void:
 		return
 	match condition:
 		"dead":
-			_sprite.modulate = Color(0.7, 0.7, 0.75)
+			# Art carries the look — keep full color on dead frames
+			_sprite.modulate = Color.WHITE
 		"critical", "dying", "weak":
-			_sprite.modulate = Color(0.9, 0.65, 0.65)
+			_sprite.modulate = Color(0.92, 0.72, 0.72)
 		"hungry":
 			_sprite.modulate = Color(0.95, 0.88, 0.75)
 		_:
@@ -147,10 +148,11 @@ func play_anim(anim: StringName) -> void:
 	if not _sprite.sprite_frames.has_animation(anim):
 		push_warning("Missing anim: %s" % anim)
 		return
-	# Force non-loop for care actions so they don't run forever
-	if _sprite.sprite_frames.has_animation(anim):
+	# Care actions: play once. Dead / mood loops: keep factory loop flags.
+	var one_shot := String(anim) in ["feed", "play", "clean", "sleep", "wake", "dig", "eat"]
+	if _sprite.sprite_frames.has_animation(anim) and one_shot:
 		_sprite.sprite_frames.set_animation_loop(anim, false)
-	_acting = true
+	_acting = one_shot  # dead/mood stay free so idle-like loops can run
 	_sprite.stop()
 	_sprite.play(anim)
 

@@ -1,6 +1,6 @@
 # Needs your review
 
-- **PR #18** — Zzz sleep, gate care while asleep, high-contrast CARE menu
-  https://github.com/i-apologise/real-time-virtual-pet/pull/18
+- **PR #19** — need meters, ETAs, feed feedback
+  https://github.com/i-apologise/real-time-virtual-pet/pull/19
 
-Review Files changed: `docs/pr-screenshots/pr18-sleep-zzz-care-menu.png`
+Also in flight / unmerged stacks: sleep CARE UX, nav/home/dead art if not merged yet.

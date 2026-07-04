@@ -290,13 +290,7 @@ func _complete_care() -> void:
 	var result: Dictionary = PetController.request_care(action)
 	_sync_pet_mood()
 	if result.get("ok", false):
-		match String(action):
-			"sleep":
-				toast.emit("Zzz… good night!")
-			"wake":
-				toast.emit("Wakey wakey!")
-			_:
-				toast.emit("%s done!" % str(action).capitalize())
+		toast.emit(_success_toast(action, result))
 	else:
 		var reason := str(result.get("reason", ""))
 		var msg := str(result.get("message", ""))
@@ -317,6 +311,42 @@ func _complete_care() -> void:
 					msg = "%s failed — %s" % [str(action).capitalize(), reason.replace("_", " ").to_lower()]
 		toast.emit(msg)
 	choreography_finished.emit(action, result)
+
+
+func _success_toast(action: StringName, result: Dictionary) -> String:
+	var deltas: Dictionary = result.get("deltas", {}) as Dictionary
+	match String(action):
+		"sleep":
+			return "Zzz… good night!"
+		"wake":
+			return "Wakey wakey!"
+		"feed":
+			if PetController.active_pet:
+				var now_h: float = float(deltas.get("hunger_after", PetController.active_pet.hunger))
+				var applied: float = float(deltas.get("hunger", 0.0))
+				if applied < 0.5 and now_h >= 99.0:
+					return "Fed! Already full — Hunger 100/100"
+				return "Fed! Hunger %d → %d  (+%d)" % [
+					int(round(float(deltas.get("hunger_before", now_h - applied)))),
+					int(round(now_h)),
+					int(round(applied)),
+				]
+			return "Fed!"
+		"clean":
+			return "Clean! Hygiene now %.0f/100" % (
+				PetController.active_pet.hygiene if PetController.active_pet else 0.0
+			)
+		"walk":
+			return "Walk done! Happy %.0f · energy %.0f" % [
+				PetController.active_pet.happiness if PetController.active_pet else 0.0,
+				PetController.active_pet.energy if PetController.active_pet else 0.0,
+			]
+		"play":
+			return "Play done! Happy %.0f/100" % (
+				PetController.active_pet.happiness if PetController.active_pet else 0.0
+			)
+		_:
+			return "%s done!" % str(action).capitalize()
 
 
 func _action_to_anim(action: StringName) -> StringName:

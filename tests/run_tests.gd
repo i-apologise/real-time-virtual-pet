@@ -15,6 +15,7 @@ const TEST_SCRIPTS := [
 	"res://tests/test_scenes_load.gd",
 	"res://tests/test_debug_clock.gd",
 	"res://tests/test_sprite_gameplay.gd",
+	"res://tests/test_needs_forecast.gd",
 ]
 
 

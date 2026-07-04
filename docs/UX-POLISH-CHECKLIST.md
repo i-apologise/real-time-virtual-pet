@@ -12,17 +12,31 @@ Living list of player-facing papercuts. When changing care/HUD/nav, scan this li
 - [x] Friendly fail toasts (cooldown, energy, already awake/asleep).
 - [x] Sleep pet animation **loops** (not one-shot).
 
-## Still open / watch
+## Fixed (need meters + ETAs)
 
-- [ ] Cooldown remaining seconds in toast (sim already has `remaining_sec`).
-- [ ] Auto-wake option on FEED (optional design — currently must wake first).
-- [ ] Energy/hygiene thresholds shown on greyed menu rows (“too tired”).
-- [ ] CARE menu clickable with mouse.
-- [ ] SFX on care success / fail.
+- [x] Need meters show **numeric value** (not bar-only).
+- [x] Per-need **ETA** (hungry / sleepy / lonely / dirty in Xm).
+- [x] Summary line from `NeedsForecast` (e.g. hungry in 3h · sleepy in 5h).
+- [x] Feed toast shows **Hunger now X/100** and real applied delta (after clamp).
+- [x] Bar **green flash** when a need rises from care.
+
+## Still open / nice-to-have (ideas)
+
+- [ ] Cooldown remaining on CARE rows (“FEED · ready in 4m”).
+- [ ] Auto-wake option on FEED (optional — currently must wake first).
+- [ ] Grey CARE rows when energy too low for walk/play.
+- [ ] CARE menu mouse click.
+- [ ] SFX + particles on care success.
 - [ ] Toast auto-clear after 3s.
 - [ ] First-time tooltips collapse after N sessions.
-- [ ] Leash thickness / visibility (playtest P1).
-- [ ] Town/yard art still blocky (presentation, not logic).
+- [ ] “Suggested care” tip (e.g. “Hunger low — FEED”).
+- [ ] Day/night phase chip on HUD.
+- [ ] Pet age / days owned.
+- [ ] Leash thickness / town art / SFX (presentation).
+
+### Why feed looked broken
+
+Starter hunger is **80/100**; feed +30 **clamps to 100**. Bar can look “full already” without numbers. Cooldown is **10 minutes** real-time — second feed fails until ready. Fix: numbers + ETA + explicit toast.
 
 ## Rules for agents
 

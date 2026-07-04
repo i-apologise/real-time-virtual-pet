@@ -57,18 +57,6 @@ func _ready() -> void:
 	call_deferred("boot")
 
 
-func _notification(what: int) -> void:
-	# Persist sleep + needs immediately on quit / background so restarts match wall-clock.
-	if not _booted:
-		return
-	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED:
-		_save_atomic()
-	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT:
-		_save_atomic()
-	elif what == NOTIFICATION_APPLICATION_FOCUS_IN:
-		on_focus_resume()
-
-
 func boot() -> void:
 	if _booted:
 		return
@@ -362,7 +350,14 @@ func _save_atomic() -> void:
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
-		on_focus_resume()
-	elif what == NOTIFICATION_WM_CLOSE_REQUEST:
-		_save_atomic()
+	## Single handler: resume catch-up on focus; flush save on quit/background so sleep persists.
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_IN or what == NOTIFICATION_APPLICATION_FOCUS_IN:
+		if _booted:
+			on_focus_resume()
+	elif (
+		what == NOTIFICATION_WM_CLOSE_REQUEST
+		or what == NOTIFICATION_APPLICATION_PAUSED
+		or what == NOTIFICATION_APPLICATION_FOCUS_OUT
+	):
+		if _booted:
+			_save_atomic()

@@ -1,5 +1,5 @@
 extends Node2D
-## Backyard graveyard: walk to empty plot, hold E/Space to dig and bury.
+## Backyard attached to the house: walk from home south door, dig at plot, return via house path.
 
 const SpriteFactoryScr = preload("res://src/gameplay/sprite_factory.gd")
 const AnimatedActorScr = preload("res://src/gameplay/animated_actor.gd")
@@ -7,6 +7,7 @@ const AnimatedActorScr = preload("res://src/gameplay/animated_actor.gd")
 const LAYER_WORLD := 1
 const DIG_HOLD_SEC := 2.5
 const PLOT_RADIUS := 40.0
+const DOOR_HOUSE := Rect2(40, 300, 80, 50)  # path back into house
 
 var _human: CharacterBody2D
 var _dead_pet: CharacterBody2D
@@ -16,7 +17,7 @@ var _label: Label
 var _toast: Label
 var _dig_bar: ProgressBar
 var _dig_panel: PanelContainer
-var _plot_pos: Vector2 = Vector2(320, 220)
+var _plot_pos: Vector2 = Vector2(320, 200)
 var _near_plot: bool = false
 var _digging: bool = false
 var _dig_accum: float = 0.0
@@ -26,7 +27,20 @@ var _buried_this_visit: bool = false
 func _ready() -> void:
 	y_sort_enabled = true
 	_build()
+	_apply_spawn()
 	_refresh_state()
+
+
+func _apply_spawn() -> void:
+	if _human == null:
+		return
+	var spawn := SceneRouter.take_spawn("default")
+	match spawn:
+		"from_house":
+			# enter from house back door — south path
+			_human.position = Vector2(80, 320)
+		_:
+			_human.position = Vector2(80, 320)
 
 
 func _tile(area: Rect2, kind: String) -> void:
@@ -71,18 +85,38 @@ func _build() -> void:
 	add_child(_world)
 
 	_tile(Rect2(0, 0, 640, 400), "grass")
-	_tile(Rect2(200, 160, 240, 120), "path")
+	# Path from house door (bottom-left) to plot
+	_tile(Rect2(48, 280, 48, 100), "path")
+	_tile(Rect2(48, 200, 240, 48), "path")
+	_tile(Rect2(240, 160, 160, 120), "path")
 
-	# fence borders
+	# fence — open gap at house connection (bottom-left)
 	_solid(Rect2(0, 0, 640, 16), Color("6B4E2E"))
 	_solid(Rect2(0, 384, 640, 16), Color("6B4E2E"))
-	_solid(Rect2(0, 0, 16, 400), Color("6B4E2E"))
+	_solid(Rect2(0, 0, 16, 300), Color("6B4E2E"))
+	_solid(Rect2(0, 350, 16, 50), Color("6B4E2E"))  # leave gap ~300–350 for house path
 	_solid(Rect2(624, 0, 16, 400), Color("6B4E2E"))
 
-	# Existing headstones (already buried)
+	# House exterior wall peek (north of entry) — “attached to home”
+	_solid(Rect2(20, 340, 100, 40), Color("C48C5C"))
+	var house_lab := Label.new()
+	house_lab.text = "← House door"
+	house_lab.position = Vector2(28, 310)
+	house_lab.add_theme_font_size_override("font_size", 11)
+	house_lab.add_theme_color_override("font_color", Color.WHITE)
+	_world.add_child(house_lab)
+	# door plate
+	var door := ColorRect.new()
+	door.size = Vector2(24, 28)
+	door.position = Vector2(58, 348)
+	door.color = Color("5A3A22")
+	door.z_index = 5
+	door.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_world.add_child(door)
+
 	_draw_existing_graves()
 
-	# Open dig plot (backyard plot marker)
+	# Open dig plot
 	var plot := ColorRect.new()
 	plot.size = Vector2(48, 32)
 	plot.position = _plot_pos - Vector2(24, 16)
@@ -101,7 +135,7 @@ func _build() -> void:
 	_human = AnimatedActorScr.new()
 	_human.is_player_controlled = true
 	_human.move_speed = 105.0
-	_human.position = Vector2(120, 300)
+	_human.position = Vector2(80, 320)
 	_world.add_child(_human)
 	_human.setup_frames(SpriteFactoryScr.human_frames(), 2.0)
 	_human.setup_collision(false)
@@ -116,11 +150,10 @@ func _build() -> void:
 	_camera.limit_right = 640
 	_camera.limit_bottom = 400
 
-	# Dead pet body near plot if unburied
 	_dead_pet = AnimatedActorScr.new()
 	_dead_pet.is_pet = true
 	_dead_pet.is_player_controlled = false
-	_dead_pet.position = _plot_pos + Vector2(-40, 0)
+	_dead_pet.position = _plot_pos + Vector2(-48, 8)
 	_world.add_child(_dead_pet)
 
 	var layer := CanvasLayer.new()
@@ -136,9 +169,9 @@ func _build() -> void:
 	layer.add_child(_toast)
 
 	var back := Button.new()
-	back.text = "Leave Graveyard"
+	back.text = "Enter house"
 	back.position = Vector2(8, 56)
-	back.pressed.connect(func(): SceneRouter.go("habitat"))
+	back.pressed.connect(func(): SceneRouter.go("habitat", "from_backyard"))
 	layer.add_child(back)
 
 	_dig_panel = PanelContainer.new()
@@ -162,7 +195,7 @@ func _draw_existing_graves() -> void:
 	for g in graves:
 		if not (g is GraveRecord):
 			continue
-		var pos := Vector2(80 + (i % 8) * 64, 80 + int(i / 8) * 70)
+		var pos := Vector2(80 + (i % 8) * 64, 60 + int(i / 8) * 70)
 		var stone := ColorRect.new()
 		stone.size = Vector2(28, 36)
 		stone.position = pos
@@ -170,6 +203,13 @@ func _draw_existing_graves() -> void:
 		stone.z_index = int(pos.y)
 		stone.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_world.add_child(stone)
+		# simple headstone top
+		var top := ColorRect.new()
+		top.size = Vector2(20, 10)
+		top.position = pos + Vector2(4, -8)
+		top.color = Color("9A9AA4")
+		top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_world.add_child(top)
 		var lab := Label.new()
 		lab.text = g.name
 		lab.position = pos + Vector2(-4, 36)
@@ -186,20 +226,28 @@ func _refresh_state() -> void:
 		_dead_pet.visible = needs_burial
 		if needs_burial:
 			var sid := String(p.species_id)
-			_dead_pet.setup_frames(SpriteFactoryScr.pet_frames(sid), 2.0)
+			_dead_pet.setup_frames(SpriteFactoryScr.pet_frames(sid), 2.4)
 			_dead_pet.set_condition("dead")
 			_dead_pet.play_anim(&"dead")
 			_dead_pet.set_collision_enabled(false)
 	if needs_burial:
-		_label.text = "Backyard Graveyard — carry %s to the EMPTY PLOT · hold E to dig" % p.name
+		_label.text = "Your backyard — bring %s to the EMPTY PLOT · hold E to dig · house door SW" % p.name
 	else:
-		_label.text = "Backyard Graveyard — rest in peace · Leave when ready"
+		_label.text = "Your backyard — rest in peace · E at house door (SW) to go home"
 		_dig_panel.visible = false
 
 
 func _process(delta: float) -> void:
 	if _human == null:
 		return
+
+	# House door exit
+	if DOOR_HOUSE.has_point(_human.position):
+		_label.text = "House door — press E to go inside"
+		if Input.is_action_just_pressed("interact") and not _digging:
+			SceneRouter.go("habitat", "from_backyard")
+			return
+
 	_near_plot = _human.global_position.distance_to(_plot_pos) <= PLOT_RADIUS
 	var p = PetController.active_pet
 	var needs_burial: bool = (
@@ -217,9 +265,7 @@ func _process(delta: float) -> void:
 			if _human.has_method("set_busy"):
 				_human.set_busy(true)
 			if _human.has_method("play_anim"):
-				# keep digging pose
-				if _human.get("_sprite") != null or true:
-					_human.play_anim(&"dig")
+				_human.play_anim(&"dig")
 			if _dig_accum >= DIG_HOLD_SEC:
 				_finish_dig()
 		else:
@@ -233,7 +279,7 @@ func _process(delta: float) -> void:
 					_human.play_idle()
 	else:
 		_dig_panel.visible = needs_burial and _near_plot
-		if needs_burial and not _near_plot:
+		if needs_burial and not _near_plot and not DOOR_HOUSE.has_point(_human.position):
 			_dig_accum = 0.0
 			_dig_bar.value = 0.0
 			_digging = false
@@ -254,11 +300,11 @@ func _finish_dig() -> void:
 		_buried_this_visit = true
 		if r.get("grave") is GraveRecord:
 			pet_name = (r["grave"] as GraveRecord).name
-		_toast.text = "Grave dug. %s is at rest." % pet_name
+		_toast.text = "Grave dug. %s is at rest. Enter house (SW) when ready." % pet_name
 		if _dead_pet:
 			_dead_pet.visible = false
 		_dig_panel.visible = false
-		_label.text = "Burial complete — Leave · adopt again at the Store"
+		_label.text = "Burial complete — house door (SW) · adopt again at the Store"
 		var stone := ColorRect.new()
 		stone.size = Vector2(28, 36)
 		stone.position = _plot_pos - Vector2(14, 28)

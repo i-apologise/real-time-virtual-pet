@@ -1,5 +1,6 @@
 extends Node
 ## Routes between tutorial / habitat / graveyard / store / town.
+## Supports spawn keys so doors land the player at the right place.
 
 enum Poi { TOWN, HOUSE, PARK, STORE, GRAVEYARD }
 
@@ -12,7 +13,13 @@ const SCENE_PATHS := {
 	"tutorial": "res://scenes/ui/tutorial.tscn",
 }
 
+## Spawn keys used by scenes (take_spawn clears after read).
+## habitat: from_town | from_backyard | default
+## town: from_house | from_store | default
+## graveyard: from_house | default
+## pet_store: from_town | default
 var current_scene_id: String = "main"
+var pending_spawn: String = ""
 
 
 func describe_poi(poi: Poi) -> String:
@@ -26,7 +33,7 @@ func describe_poi(poi: Poi) -> String:
 		Poi.STORE:
 			return "Pet Store"
 		Poi.GRAVEYARD:
-			return "Graveyard"
+			return "Backyard"
 		_:
 			return "Unknown"
 
@@ -35,13 +42,22 @@ func bind_host(_host: Node) -> void:
 	pass
 
 
-func go(scene_id: String) -> void:
+func go(scene_id: String, spawn: String = "") -> void:
 	var path: String = str(SCENE_PATHS.get(scene_id, ""))
 	if path == "" or not ResourceLoader.exists(path):
 		push_warning("SceneRouter: missing scene %s" % scene_id)
 		return
+	pending_spawn = spawn
 	var err := get_tree().change_scene_to_file(path)
 	if err != OK:
 		push_warning("SceneRouter: failed to open %s err=%s" % [path, err])
 		return
 	current_scene_id = scene_id
+
+
+func take_spawn(default_spawn: String = "default") -> String:
+	var s := pending_spawn
+	pending_spawn = ""
+	if s == "":
+		return default_spawn
+	return s

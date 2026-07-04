@@ -27,7 +27,7 @@ func _ready() -> void:
 	if has_pet:
 		var back := Button.new()
 		back.text = "Back"
-		back.pressed.connect(func(): SceneRouter.go("town"))
+		back.pressed.connect(func(): SceneRouter.go("town", "from_store"))
 		top.add_child(back)
 	var title := Label.new()
 	title.text = "Adopt your first pet" if not has_pet else "Pet Store — choose a companion"

@@ -12,6 +12,7 @@ var last_status: Dictionary = {"message": "", "priority": 0}
 ## Outdoor leash walk: pet sticks to human across scenes until walk ends.
 var escort_active: bool = false
 var escort_elapsed_sec: float = 0.0
+var escort_visited_park: bool = false
 const ESCORT_MIN_SEC := 10.0
 ## Set on each focus/boot catch-up for session summary UI.
 var last_session_summary: Dictionary = {}
@@ -21,6 +22,12 @@ var _session_banner_pending: bool = false
 func start_escort() -> void:
 	escort_active = true
 	escort_elapsed_sec = 0.0
+	escort_visited_park = false
+
+
+func note_park_visit() -> void:
+	if escort_active:
+		escort_visited_park = true
 
 
 func tick_escort(delta: float) -> void:
@@ -33,12 +40,15 @@ func can_finish_escort() -> bool:
 
 
 func end_escort(apply_walk_care: bool = true) -> Dictionary:
-	## Clears escort. Optionally applies WALK care reward once.
+	## Clears escort. Optionally applies WALK care reward once (park bonus if visited).
+	var park_bonus := escort_visited_park
 	escort_active = false
-	var result := {"ok": true, "applied": false, "reason": &""}
+	escort_visited_park = false
+	var result := {"ok": true, "applied": false, "reason": &"", "outdoor_park": park_bonus}
 	if apply_walk_care and active_pet != null and str(active_pet.life_state) != "DEAD":
-		result = request_care(&"walk")
+		result = request_care(&"walk", {"outdoor_park": park_bonus})
 		result["applied"] = bool(result.get("ok", false))
+		result["outdoor_park"] = park_bonus
 	return result
 
 
@@ -131,7 +141,7 @@ func get_status_line() -> String:
 	]
 
 
-func request_care(action: StringName) -> Dictionary:
+func request_care(action: StringName, ctx: Dictionary = {}) -> Dictionary:
 	if active_pet == null:
 		return {"ok": false, "reason": &"NO_ACTIVE_PET"}
 	# Advance sim to now before care
@@ -140,12 +150,72 @@ func request_care(action: StringName) -> Dictionary:
 		return {"ok": false, "reason": &"NO_ACTIVE_PET"}
 	var now: float = TimeService.now_unix_utc()
 	var is_day: bool = TimeService.local_day_phase() == &"day"
-	var result: Dictionary = CareActions.try_action(action, active_pet, now, is_day)
+	# Inventory / locale context
+	var care_ctx: Dictionary = ctx.duplicate(true)
+	if not care_ctx.has("outdoor_park"):
+		care_ctx["outdoor_park"] = str(SceneRouter.current_scene_id) == "park"
+	care_ctx["has_chew_toy"] = profile.inv_count("chew_toy") > 0
+	# Consume charge items when used
+	if String(action) == "feed" and profile.inv_count("premium_food") > 0:
+		if profile.consume_item("premium_food"):
+			care_ctx["use_premium_food"] = true
+	if String(action) == "clean" and profile.inv_count("soap") > 0:
+		if profile.consume_item("soap"):
+			care_ctx["use_soap"] = true
+	var result: Dictionary = CareActions.try_action(action, active_pet, now, is_day, care_ctx)
 	if result.get("ok", false):
+		# Soft currency for successful care
+		var pts := _care_points_for(action, care_ctx)
+		profile.add_care_points(pts)
+		result["care_points_earned"] = pts
+		result["care_points_total"] = profile.care_points
 		EventBus.care_performed.emit(action, result)
 		_save_atomic()
 		publish()
+	elif care_ctx.get("use_premium_food", false):
+		# refund consume if care failed after we already took item (shouldn't often)
+		profile.add_item("premium_food", 1)
+	elif care_ctx.get("use_soap", false):
+		profile.add_item("soap", 1)
 	return result
+
+
+func _care_points_for(action: StringName, ctx: Dictionary) -> int:
+	var base := 4
+	match String(action):
+		"feed", "clean":
+			base = 5
+		"play":
+			base = 6
+		"walk":
+			base = 7
+		"sleep", "wake":
+			base = 2
+		_:
+			base = 3
+	if bool(ctx.get("outdoor_park", false)):
+		base += 3
+	return base
+
+
+func buy_store_item(item_id: String) -> Dictionary:
+	## Shop catalog prices.
+	var catalog := {
+		"premium_food": {"cost": 12, "label": "Premium Food", "desc": "Next feed +15 hunger"},
+		"soap": {"cost": 10, "label": "Gentle Soap", "desc": "Next clean +15 hygiene"},
+		"chew_toy": {"cost": 25, "label": "Chew Toy", "desc": "Permanent +6 happiness on play"},
+	}
+	if not catalog.has(item_id):
+		return {"ok": false, "reason": &"UNKNOWN_ITEM"}
+	if item_id == "chew_toy" and profile.inv_count("chew_toy") > 0:
+		return {"ok": false, "reason": &"ALREADY_OWNED"}
+	var cost: int = int(catalog[item_id]["cost"])
+	if not profile.try_spend(cost):
+		return {"ok": false, "reason": &"NOT_ENOUGH_POINTS", "need": cost, "have": profile.care_points}
+	profile.add_item(item_id, 1)
+	_save_atomic()
+	publish()
+	return {"ok": true, "item": item_id, "cost": cost, "care_points": profile.care_points}
 
 
 func adopt_pet(species_id: StringName, raw_name: String) -> Dictionary:

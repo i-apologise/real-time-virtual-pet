@@ -173,9 +173,15 @@ func _build() -> void:
 	back.position = Vector2(8, 54)
 	back.pressed.connect(func(): SceneRouter.go("town", "from_park"))
 	layer.add_child(back)
+	var fetch := Button.new()
+	fetch.text = "Play fetch (+park bonus)"
+	fetch.position = Vector2(8, 88)
+	fetch.pressed.connect(_try_park_play)
+	layer.add_child(fetch)
 
 
 func _maybe_escort() -> void:
+	PetController.note_park_visit()
 	if not PetController.escort_active:
 		_toast.text = "Nice day for a stroll — bring a leashed pet from home (CARE → WALK)"
 		return
@@ -226,3 +232,23 @@ func _process(delta: float) -> void:
 		_label.text = "Town gate — press E"
 		if Input.is_action_just_pressed("interact"):
 			SceneRouter.go("town", "from_park")
+
+
+func _try_park_play() -> void:
+	## Outdoor play without full habitat choreography — park happiness bonus.
+	if PetController.active_pet == null or str(PetController.active_pet.life_state) == "DEAD":
+		_toast.text = "Bring a living pet (leash walk from home)"
+		return
+	if not PetController.escort_active and _pet == null:
+		_toast.text = "Leash them at home (CARE → WALK) then visit the park"
+		return
+	PetController.note_park_visit()
+	var r: Dictionary = PetController.request_care(&"play", {"outdoor_park": true})
+	if r.get("ok", false):
+		var pts := int(r.get("care_points_earned", 0))
+		_toast.text = "Fetch! Happy park play · +%d care points" % pts
+		var audio := get_node_or_null("/root/AudioService")
+		if audio and audio.has_method("play_care"):
+			audio.play_care(&"play", true)
+	else:
+		_toast.text = "Can't play: %s" % str(r.get("reason", "no"))

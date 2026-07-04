@@ -234,7 +234,25 @@ If care is on cooldown you’ll get a friendly toast (not a silent fail).
 2. You keep **WASD** control.  
 3. Use **left door** → **Town** → optional **Park**. Pet **follows**.  
 4. After **≥ 10 seconds**, **E near pet** to end walk and apply walk rewards.  
-5. Timer shows minimum walk remaining, then “E end walk”.
+5. Timer shows minimum walk remaining, then “E end walk”.  
+6. **Park visit** during the walk grants an **outdoor happiness bonus** when you end the walk.  
+7. At the park, **Play fetch** (button) runs outdoor **PLAY** with a park bonus (pet must be on leash from home).
+
+### Care points & store supplies
+
+Successful care earns soft currency **care points** (❤ in the home counter).
+
+| Item | Cost | Effect |
+|------|------|--------|
+| **Premium Food** | 12❤ | Next **feed** +15 hunger (and a bit of happiness) |
+| **Gentle Soap** | 10❤ | Next **clean** +15 hygiene |
+| **Chew Toy** | 25❤ | Permanent: **play** +6 happiness (one purchase) |
+
+Buy on the left **Supplies** panel inside the pet store. Earn points by caring at home and especially at the **park**.
+
+### Home atmosphere
+
+The house reacts to state: **bowl** empties when hungry, **mess** appears when hygiene is low, **lamp/windows** shift at night, and a short room note (e.g. “Bowl looks empty…”).
 
 ---
 

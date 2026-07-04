@@ -258,6 +258,40 @@ func _build_ui() -> void:
 	leave.pressed.connect(func(): SceneRouter.go("town", "from_store"))
 	_ui_layer.add_child(leave)
 
+	# Care-points shop (supplies)
+	var shop := PanelContainer.new()
+	shop.add_theme_stylebox_override("panel", _style_panel())
+	shop.position = Vector2(8, 100)
+	_ui_layer.add_child(shop)
+	var shop_v := VBoxContainer.new()
+	shop_v.add_theme_constant_override("separation", 6)
+	shop.add_child(shop_v)
+	var shop_title := Label.new()
+	shop_title.add_theme_font_size_override("font_size", 15)
+	shop_title.add_theme_color_override("font_color", Color(0.12, 0.1, 0.08))
+	shop_title.text = "Supplies · Care points: %d" % PetController.profile.care_points
+	shop_title.name = "ShopTitle"
+	shop_v.add_child(shop_title)
+	set_meta("shop_title", shop_title)
+	var inv_lab := Label.new()
+	inv_lab.add_theme_font_size_override("font_size", 11)
+	inv_lab.add_theme_color_override("font_color", Color(0.25, 0.2, 0.15))
+	inv_lab.name = "InvLab"
+	shop_v.add_child(inv_lab)
+	set_meta("inv_lab", inv_lab)
+	for item in [
+		["premium_food", "Premium Food · 12❤", "Next feed +15 hunger"],
+		["soap", "Gentle Soap · 10❤", "Next clean +15 hygiene"],
+		["chew_toy", "Chew Toy · 25❤", "Permanent play +6 happy"],
+	]:
+		var b := Button.new()
+		b.text = str(item[1])
+		b.tooltip_text = str(item[2])
+		var iid: String = str(item[0])
+		b.pressed.connect(func(): _buy_item(iid))
+		shop_v.add_child(b)
+	_refresh_shop_labels()
+
 	# Adopt modal
 	_adopt_panel = PanelContainer.new()
 	_adopt_panel.visible = false
@@ -351,6 +385,38 @@ func _pen_by_species(sid: StringName) -> Dictionary:
 	return _pens[0] if not _pens.is_empty() else {}
 
 
+func _refresh_shop_labels() -> void:
+	var st: Label = get_meta("shop_title") as Label if has_meta("shop_title") else null
+	var inv: Label = get_meta("inv_lab") as Label if has_meta("inv_lab") else null
+	if st:
+		st.text = "Supplies · Care points: %d❤" % PetController.profile.care_points
+	if inv:
+		var p = PetController.profile
+		inv.text = "Bag: food×%d  soap×%d  toy×%d" % [
+			p.inv_count("premium_food"),
+			p.inv_count("soap"),
+			p.inv_count("chew_toy"),
+		]
+
+
+func _buy_item(item_id: String) -> void:
+	var r: Dictionary = PetController.buy_store_item(item_id)
+	if r.get("ok", false):
+		_toast.text = "Bought %s · %d❤ left" % [item_id.replace("_", " "), int(r.get("care_points", 0))]
+		var audio := get_node_or_null("/root/AudioService")
+		if audio and audio.has_method("play"):
+			audio.play("ui_click")
+	else:
+		var reason := str(r.get("reason", "fail"))
+		if reason == "NOT_ENOUGH_POINTS":
+			_toast.text = "Need more care points (earn by caring at home / park)"
+		elif reason == "ALREADY_OWNED":
+			_toast.text = "You already own a chew toy"
+		else:
+			_toast.text = "Can't buy: %s" % reason
+	_refresh_shop_labels()
+
+
 func _confirm_adopt() -> void:
 	if _living_pet_blocks():
 		_toast.text = "Can't adopt while you have a living pet"
@@ -376,6 +442,7 @@ func _confirm_adopt() -> void:
 func _process(_delta: float) -> void:
 	if _human == null:
 		return
+	_refresh_shop_labels()
 	# Animate pen pets a little
 	for pen in _pens:
 		var a: Node = pen.get("actor")

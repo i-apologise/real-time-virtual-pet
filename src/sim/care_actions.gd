@@ -7,17 +7,19 @@ static func try_action(
 	action: StringName,
 	pet: PetModel,
 	now: float,
-	is_local_day: bool = false
+	is_local_day: bool = false,
+	ctx: Dictionary = {}
 ) -> Dictionary:
+	## ctx optional: outdoor_park (bool), use_premium_food, use_soap, has_chew_toy
 	match String(action):
 		"feed":
-			return try_feed(pet, now)
+			return try_feed(pet, now, ctx)
 		"walk":
-			return try_walk(pet, now, is_local_day)
+			return try_walk(pet, now, is_local_day, ctx)
 		"play":
-			return try_play(pet, now)
+			return try_play(pet, now, ctx)
 		"clean":
-			return try_clean(pet, now)
+			return try_clean(pet, now, ctx)
 		"sleep":
 			return try_sleep(pet, now)
 		"wake":
@@ -26,7 +28,7 @@ static func try_action(
 			return _fail(&"UNKNOWN_ACTION")
 
 
-static func try_feed(pet: PetModel, now: float) -> Dictionary:
+static func try_feed(pet: PetModel, now: float, ctx: Dictionary = {}) -> Dictionary:
 	var gate := _alive_awake_gate(pet)
 	if not gate.get("ok", false):
 		return gate
@@ -39,11 +41,17 @@ static func try_feed(pet: PetModel, now: float) -> Dictionary:
 	var last_feed: float = float(pet.last_actions.get("feed", 0.0))
 	if last_feed > 0.0 and (now - last_feed) < SimConfig.FEED_DIMINISH_WINDOW_SEC:
 		hunger_delta *= SimConfig.FEED_DIMINISH_MULT
+	var premium := bool(ctx.get("use_premium_food", false))
+	if premium:
+		hunger_delta += 15.0
+		pet.happiness += 3.0
 
 	var hygiene_delta: float = SimConfig.FEED_HYGIENE_DELTA
 	var happiness_delta := 0.0
 	if hunger_was < SimConfig.NEEDY_THRESHOLD:
 		happiness_delta = SimConfig.FEED_HAPPINESS_IF_WAS_NEEDY
+	if premium:
+		happiness_delta += 3.0
 
 	pet.hunger += hunger_delta
 	pet.hygiene += hygiene_delta
@@ -59,11 +67,14 @@ static func try_feed(pet: PetModel, now: float) -> Dictionary:
 			"happiness": happiness_delta,
 			"hunger_before": hunger_was,
 			"hunger_after": pet.hunger,
+			"premium_food": premium,
 		}
 	)
 
 
-static func try_walk(pet: PetModel, now: float, is_local_day: bool = false) -> Dictionary:
+static func try_walk(
+	pet: PetModel, now: float, is_local_day: bool = false, ctx: Dictionary = {}
+) -> Dictionary:
 	var gate := _alive_awake_gate(pet)
 	if not gate.get("ok", false):
 		return gate
@@ -76,11 +87,15 @@ static func try_walk(pet: PetModel, now: float, is_local_day: bool = false) -> D
 	var happy: float = SimConfig.WALK_HAPPINESS_DELTA
 	if is_local_day:
 		happy += SimConfig.WALK_DAY_BONUS_HAPPINESS
+	var park := bool(ctx.get("outdoor_park", false))
+	if park:
+		happy += 8.0  # park walk bonus
 	var deltas := {
 		"happiness": happy,
 		"hunger": SimConfig.WALK_HUNGER_DELTA,
-		"energy": SimConfig.WALK_ENERGY_DELTA,
+		"energy": SimConfig.WALK_ENERGY_DELTA + (-4.0 if park else 0.0),  # slightly more tired from park
 		"hygiene": SimConfig.WALK_HYGIENE_DELTA,
+		"outdoor_park": park,
 	}
 	pet.happiness += deltas["happiness"]
 	pet.hunger += deltas["hunger"]
@@ -90,7 +105,7 @@ static func try_walk(pet: PetModel, now: float, is_local_day: bool = false) -> D
 	return _ok(&"walk", deltas)
 
 
-static func try_play(pet: PetModel, now: float) -> Dictionary:
+static func try_play(pet: PetModel, now: float, ctx: Dictionary = {}) -> Dictionary:
 	var gate := _alive_awake_gate(pet)
 	if not gate.get("ok", false):
 		return gate
@@ -100,10 +115,17 @@ static func try_play(pet: PetModel, now: float) -> Dictionary:
 	if cd > 0.0:
 		return _fail(&"COOLDOWN", {"remaining_sec": cd})
 
+	var happy: float = SimConfig.PLAY_HAPPINESS_DELTA
+	if bool(ctx.get("has_chew_toy", false)):
+		happy += 6.0
+	if bool(ctx.get("outdoor_park", false)):
+		happy += 10.0  # park fetch bonus
 	var deltas := {
-		"happiness": SimConfig.PLAY_HAPPINESS_DELTA,
+		"happiness": happy,
 		"energy": SimConfig.PLAY_ENERGY_DELTA,
 		"hunger": SimConfig.PLAY_HUNGER_DELTA,
+		"outdoor_park": bool(ctx.get("outdoor_park", false)),
+		"chew_toy": bool(ctx.get("has_chew_toy", false)),
 	}
 	pet.happiness += deltas["happiness"]
 	pet.energy += deltas["energy"]
@@ -112,7 +134,7 @@ static func try_play(pet: PetModel, now: float) -> Dictionary:
 	return _ok(&"play", deltas)
 
 
-static func try_clean(pet: PetModel, now: float) -> Dictionary:
+static func try_clean(pet: PetModel, now: float, ctx: Dictionary = {}) -> Dictionary:
 	var gate := _alive_awake_gate(pet)
 	if not gate.get("ok", false):
 		return gate
@@ -125,10 +147,20 @@ static func try_clean(pet: PetModel, now: float) -> Dictionary:
 	var happiness_delta := 0.0
 	if hygiene_was < SimConfig.NEEDY_THRESHOLD:
 		happiness_delta = SimConfig.CLEAN_HAPPINESS_IF_WAS_DIRTY
+	if bool(ctx.get("use_soap", false)):
+		hygiene_delta += 15.0
+		happiness_delta += 2.0
 	pet.hygiene += hygiene_delta
 	pet.happiness += happiness_delta
 	_finish_care(pet, "clean", now)
-	return _ok(&"clean", {"hygiene": hygiene_delta, "happiness": happiness_delta})
+	return _ok(
+		&"clean",
+		{
+			"hygiene": hygiene_delta,
+			"happiness": happiness_delta,
+			"soap": bool(ctx.get("use_soap", false)),
+		}
+	)
 
 
 static func try_sleep(pet: PetModel, now: float) -> Dictionary:

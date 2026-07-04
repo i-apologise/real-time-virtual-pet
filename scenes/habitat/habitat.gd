@@ -68,6 +68,13 @@ var _care_timer_bar: ProgressBar
 var _zzz: Label
 var _zzz_t: float = 0.0
 
+# State-reactive room props
+var _bowl_food: ColorRect
+var _mess_nodes: Array = []
+var _lamp_glow: ColorRect
+var _window_night: Array = []
+var _room_note: Label
+
 # Mood / care emote bubble (bob + fade; temporary — not permanent like Zzz)
 var _emote: Label
 var _emote_ttl: float = 0.0
@@ -221,9 +228,41 @@ func _build_room() -> void:
 	# --- Pet bed + bowl (pixel props) ---
 	_add_prop_sprite(SpriteFactoryScr.prop_texture("pet_bed"), Vector2(312, 180), 2.0, -88)
 	_add_prop_sprite(SpriteFactoryScr.prop_texture("bowl"), Vector2(258, 188), 1.6, -80)
+	# Food in bowl (toggled by hunger — empty when hungry)
+	_bowl_food = _add_decor_rect(Rect2(252, 184, 14, 6), Color("F0C060"), -78)
 
 	# Center rug
 	_add_prop_sprite(SpriteFactoryScr.prop_texture("rug"), Vector2(208, 232), 2.0, -92)
+
+	# Furniture pass: shelf, plant, nightstand, lamp
+	_add_decor_rect(Rect2(430, 120, 28, 70), Color("6D4C41"), -88)  # bookcase
+	_add_decor_rect(Rect2(434, 128, 20, 8), Color("E8DCC8"), -87)
+	_add_decor_rect(Rect2(434, 142, 20, 8), Color("C8B8A0"), -87)
+	_add_decor_rect(Rect2(434, 156, 20, 8), Color("E8DCC8"), -87)
+	_add_decor_rect(Rect2(150, 120, 18, 22), Color("2E7D32"), -86)  # plant pot leaves
+	_add_decor_rect(Rect2(154, 140, 10, 12), Color("8D6E63"), -85)
+	_add_decor_rect(Rect2(100, 100, 22, 18), Color("5D4037"), -88)  # nightstand
+	# Lamp (glow turns on at night)
+	_add_decor_rect(Rect2(106, 88, 10, 14), Color("FFF8E1"), -84)
+	_lamp_glow = _add_decor_rect(Rect2(98, 78, 26, 22), Color(1.0, 0.9, 0.5, 0.0), -83)
+	# Window night shutter overlay (fades in at night)
+	_window_night.clear()
+	_window_night.append(_add_decor_rect(Rect2(120, 32, 36, 22), Color(0.05, 0.08, 0.2, 0.0), -86))
+	_window_night.append(_add_decor_rect(Rect2(280, 32, 36, 22), Color(0.05, 0.08, 0.2, 0.0), -86))
+
+	# Mess piles when hygiene low (hidden when clean)
+	_mess_nodes.clear()
+	_mess_nodes.append(_add_decor_rect(Rect2(180, 250, 22, 12), Color(0.45, 0.35, 0.25, 0.0), -76))
+	_mess_nodes.append(_add_decor_rect(Rect2(340, 230, 18, 10), Color(0.4, 0.32, 0.22, 0.0), -76))
+	_mess_nodes.append(_add_decor_rect(Rect2(200, 170, 14, 8), Color(0.5, 0.38, 0.28, 0.0), -76))
+
+	_room_note = Label.new()
+	_room_note.position = Vector2(160, 140)
+	_room_note.add_theme_font_size_override("font_size", 11)
+	_room_note.add_theme_color_override("font_color", Color(0.35, 0.3, 0.25))
+	_room_note.z_index = -50
+	_room_note.text = ""
+	_world.add_child(_room_note)
 
 	# Town door (left) — mat + frame
 	_add_decor_rect(Rect2(0, 212, 16, 52), Color("5A3A22"), -70)
@@ -245,6 +284,59 @@ func _build_room() -> void:
 	_day_overlay.size = Vector2(480, 320)
 	_day_overlay.z_index = 400
 	add_child(_day_overlay)
+
+
+func _update_room_state() -> void:
+	## Bowl, mess, lamp, window respond to pet needs + day phase.
+	var p = PetController.active_pet
+	var phase := str(TimeService.local_day_phase())
+	var nightish := phase == "night" or phase == "dusk"
+	if _lamp_glow:
+		_lamp_glow.color = Color(1.0, 0.92, 0.55, 0.45 if nightish else 0.0)
+	for w in _window_night:
+		if w is ColorRect:
+			(w as ColorRect).color = Color(0.05, 0.08, 0.22, 0.55 if phase == "night" else (0.25 if phase == "dusk" else 0.0))
+	if p == null or str(p.life_state) == "DEAD":
+		if _bowl_food:
+			_bowl_food.color = Color("C0A070")
+		for m in _mess_nodes:
+			if m is ColorRect:
+				(m as ColorRect).color.a = 0.0
+		if _room_note:
+			_room_note.text = ""
+		return
+	# Bowl full when well-fed
+	if _bowl_food:
+		if p.hunger >= 55.0:
+			_bowl_food.color = Color("F5C84A")  # full kibble
+			_bowl_food.visible = true
+		elif p.hunger >= 30.0:
+			_bowl_food.color = Color("D4A84A")
+			_bowl_food.visible = true
+		else:
+			_bowl_food.color = Color(0.55, 0.45, 0.35, 0.9)  # empty bowl scrapings
+	# Mess when dirty
+	var mess_a := 0.0
+	if p.hygiene < 25.0:
+		mess_a = 0.85
+	elif p.hygiene < 45.0:
+		mess_a = 0.45
+	for m in _mess_nodes:
+		if m is ColorRect:
+			var c: Color = (m as ColorRect).color
+			c.a = mess_a
+			(m as ColorRect).color = c
+	if _room_note:
+		if p.is_sleeping():
+			_room_note.text = "Quiet house… Zzz"
+		elif p.hunger < 30.0:
+			_room_note.text = "Bowl looks empty…"
+		elif p.hygiene < 30.0:
+			_room_note.text = "Getting messy in here…"
+		elif p.energy < 30.0:
+			_room_note.text = "Someone needs a nap…"
+		else:
+			_room_note.text = ""
 
 
 func _build_actors() -> void:
@@ -1182,6 +1274,7 @@ func _update_near_pet_ui() -> void:
 
 
 func _refresh_need_meters(p) -> void:
+	_update_room_state()
 	var cond := _condition_from_pet(p)
 	if cond == "sleeping":
 		_stat_title.text = "%s  [Zzz sleeping]" % p.name
@@ -1357,8 +1450,10 @@ func _on_pet_updated(_snap: Dictionary) -> void:
 
 
 func _on_profile(snap: Dictionary) -> void:
-	_counter.text = "Deaths %d · Graves %d" % [
-		int(snap.get("total_pets_died", 0)), int(snap.get("total_graves_dug", 0))
+	_counter.text = "Deaths %d · Graves %d · ❤%d" % [
+		int(snap.get("total_pets_died", 0)),
+		int(snap.get("total_graves_dug", 0)),
+		int(snap.get("care_points", PetController.profile.care_points if PetController.profile else 0)),
 	]
 
 
@@ -1384,6 +1479,7 @@ func _apply_day_night(phase: String) -> void:
 			_day_overlay.color = Color(0.95, 0.55, 0.3, 0.12)
 		_:
 			_day_overlay.color = Color(0, 0, 0, 0)
+	_update_room_state()
 
 
 func _update_debug() -> void:

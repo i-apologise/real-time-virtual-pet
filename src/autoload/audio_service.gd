@@ -63,24 +63,51 @@ func play(id: String, pitch_scale: float = 1.0, volume_db: float = 999.0) -> voi
 
 
 func play_care(action: StringName, ok: bool) -> void:
+	## Action-complete feedback. Layer a short success chime so care always "reads".
 	if not ok:
-		play("care_fail")
+		play("care_fail", 0.92)
 		return
 	match String(action):
 		"feed":
-			play("feed")
+			play("feed", 1.0)
+			play("care_ok", 1.12, _sfx_volume_db - 3.0)
 		"sleep":
-			play("sleep")
+			play("sleep", 0.96)
+			play("care_ok", 0.9, _sfx_volume_db - 6.0)
 		"wake":
-			play("wake")
+			play("wake", 1.05)
+			play("care_ok", 1.15, _sfx_volume_db - 4.0)
 		"walk":
-			play("care_ok")
+			play("care_ok", 1.02)
+			play("walk_start", 1.1, _sfx_volume_db - 8.0)
 		"clean":
-			play("clean")
+			play("clean", 1.0)
+			play("care_ok", 1.08, _sfx_volume_db - 4.0)
 		"play":
-			play("care_ok", 1.05)
+			play("care_ok", 1.08)
+			play("care_ok", 1.22, _sfx_volume_db - 5.0)
 		_:
 			play("care_ok")
+
+
+func play_care_start(action: StringName) -> void:
+	## Soft mid-choreography cue when the timed act begins (after walk-to).
+	match String(action):
+		"feed":
+			play("feed", 0.88, _sfx_volume_db - 8.0)
+		"sleep":
+			play("sleep", 0.9, _sfx_volume_db - 10.0)
+		"wake":
+			play("wake", 0.95, _sfx_volume_db - 8.0)
+		"clean":
+			play("clean", 0.92, _sfx_volume_db - 8.0)
+		"play":
+			play("care_ok", 0.95, _sfx_volume_db - 10.0)
+		"walk":
+			# walk_start already fired when leash begins
+			pass
+		_:
+			play("ui_click", 1.0, _sfx_volume_db - 10.0)
 
 
 func play_door() -> void:

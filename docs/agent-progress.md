@@ -23,3 +23,7 @@
 | 2026-07-03T10:52Z | Watchdog: open **PR #11** lifelike sprites. A–E + #9/#10 merged on main. No new feature work. Awaiting user merge of #11. |
 | 2026-07-03T10:52Z | Watchdog: **PR #11** CI green, mergeable. A–E complete on main. Awaiting user merge. |
 | 2026-07-03 | **Playtest checkpoint:** ship-and-play OK. Full review + polish backlog → `docs/PLAYTEST-REVIEW-2026-07.md` (shots in `docs/playtest-review/`). Next: habitat furniture/UI polish, not more systems. PR #16 care rooms. |
+
+| 2026-07-04 | STARTED PR2 care juice after PR1 merge |
+| 2026-07-04 | NEEDS REVIEW: PR #23 — https://github.com/i-apologise/real-time-virtual-pet/pull/23 |
+| 2026-07-04 | PR1 #22 session summary/cooldowns MERGED; opened Priority 2 juice/emotes as #23. Tests 14/14 PASS. |

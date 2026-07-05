@@ -1,15 +1,5 @@
 # Needs your review
 
-**No open UX polish PRs.**
+No open PRs from the UI polish agent chain.
 
-UI polish chain **P0–P4 complete** on `main`:
-
-| PR | Scope | Status |
-|----|--------|--------|
-| #26 | P0 baseline HUD/chrome | MERGED |
-| #27 | P1 feedback/calm | MERGED |
-| #28 | P2 input/settings | MERGED |
-| #29 | P3 cross-scene chrome | MERGED |
-| #30 | P4 a11y microcopy | MERGED |
-
-Final PR: https://github.com/i-apologise/real-time-virtual-pet/pull/30
+**Completed:** P0 #26 · P1 #27 · P2 #28 · P3 #29 · P4 #30 — all **MERGED**.

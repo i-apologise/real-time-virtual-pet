@@ -21,7 +21,11 @@ var _world: Node2D
 # HUD
 var _hint: Label
 var _toast: Label
+var _toast_ttl: float = 0.0
+const TOAST_DURATION := 3.0
 var _counter: Label
+var _day_chip: Label
+var _top_bar: PanelContainer
 var _empty_panel: PanelContainer
 var _death_panel: PanelContainer
 var _day_overlay: ColorRect
@@ -80,8 +84,8 @@ var _room_note: Label
 var _emote: Label
 var _emote_ttl: float = 0.0
 var _emote_passive_cd: float = 0.0
-const EMOTE_DURATION := 2.6
-const EMOTE_PASSIVE_CD := 7.5
+const EMOTE_DURATION := 2.2
+const EMOTE_PASSIVE_CD := 14.0  # P1: reduce passive emote spam
 
 # Care juice sparks (lightweight ColorRect bursts on successful care)
 var _juice_sparks: Array = []  # {node, vel, life, max_life}
@@ -499,25 +503,33 @@ func _build_hud() -> void:
 	_hud_layer = layer
 	add_child(layer)
 
-	# --- P0 hierarchy: slim top status bar (identity + counters) ---
-	var top_bar := PanelContainer.new()
-	top_bar.name = "TopStatusBar"
-	UiThemeScr.apply_panel(top_bar, true)
-	top_bar.position = Vector2(12, 8)
-	layer.add_child(top_bar)
+	# --- P0 hierarchy: slim top status bar (identity + counters + day chip) ---
+	_top_bar = PanelContainer.new()
+	_top_bar.name = "TopStatusBar"
+	UiThemeScr.apply_panel(_top_bar, true)
+	_top_bar.position = Vector2(12, 8)
+	layer.add_child(_top_bar)
 	var top_v := VBoxContainer.new()
 	top_v.add_theme_constant_override("separation", 2)
-	top_bar.add_child(top_v)
+	_top_bar.add_child(top_v)
+	var top_row := HBoxContainer.new()
+	top_row.add_theme_constant_override("separation", 10)
+	top_v.add_child(top_row)
 	_counter = UiThemeScr.title_label("Deaths 0 · Graves 0 · ❤0", 12)
-	top_v.add_child(_counter)
+	top_row.add_child(_counter)
+	_day_chip = UiThemeScr.body_label("Day", 11)
+	_day_chip.add_theme_color_override("font_color", UiThemeScr.TEXT_ACCENT)
+	top_row.add_child(_day_chip)
+	_refresh_day_chip()
 
 	# Context verb line (bottom) — short, not a control essay
 	_hint = UiThemeScr.world_hint_label("Near pet — E Open CARE", 13)
 	_hint.position = Vector2(16, 680)
 	layer.add_child(_hint)
 
-	# Toast — bottom-center placement (TTL added in P1)
+	# Toast — bottom-center, auto-clear ~3s (P1)
 	_toast = UiThemeScr.toast_label("")
+	_toast.visible = false
 	_toast.position = Vector2(400, 640)
 	layer.add_child(_toast)
 
@@ -702,7 +714,7 @@ func _build_hud() -> void:
 	timer_v.add_child(_care_timer_bar)
 	call_deferred("_place_care_timer")
 
-	# Session check-in banner (shown once after boot/resume with gap)
+	# Session check-in banner (shown once after boot/resume with gap) — P1 product chrome
 	_session_panel = PanelContainer.new()
 	_session_panel.visible = false
 	UiThemeScr.apply_panel(_session_panel, true)
@@ -710,18 +722,12 @@ func _build_hud() -> void:
 	var sv := VBoxContainer.new()
 	sv.add_theme_constant_override("separation", 6)
 	_session_panel.add_child(sv)
-	_session_title = Label.new()
-	_session_title.add_theme_font_size_override("font_size", 16)
-	_session_title.add_theme_color_override("font_color", Color(0.1, 0.08, 0.06))
+	_session_title = UiThemeScr.title_label("Welcome back", 15)
 	sv.add_child(_session_title)
-	_session_body = Label.new()
-	_session_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_session_body.custom_minimum_size = Vector2(320, 0)
-	_session_body.add_theme_font_size_override("font_size", 12)
-	_session_body.add_theme_color_override("font_color", Color(0.2, 0.18, 0.14))
+	_session_body = UiThemeScr.body_label("", 12)
+	_session_body.custom_minimum_size = Vector2(300, 0)
 	sv.add_child(_session_body)
-	var dismiss := Button.new()
-	dismiss.text = "Got it (Esc)"
+	var dismiss := UiThemeScr.themed_button("Got it (Esc)")
 	dismiss.pressed.connect(_hide_session_banner)
 	sv.add_child(dismiss)
 
@@ -732,14 +738,49 @@ func _try_show_session_banner() -> void:
 		return
 	if _session_panel == null:
 		return
-	_session_title.text = str(snap.get("title", "Check-in"))
-	_session_body.text = str(snap.get("body", ""))
+	# P1: shorter product copy (title + at most 2 body lines)
+	_session_title.text = _short_session_title(snap)
+	_session_body.text = _short_session_body(snap)
 	_session_panel.visible = true
-	_session_ttl = 14.0
+	_session_ttl = 10.0
 	_place_session_banner()
 	var audio := get_node_or_null("/root/AudioService")
 	if audio and audio.has_method("play_menu"):
 		audio.play_menu()
+
+
+func _short_session_title(snap: Dictionary) -> String:
+	var raw := str(snap.get("title", "Welcome back"))
+	# Drop raw enum noise (e.g. "Mochi · ALIVE" → "Welcome back · Mochi")
+	if PetController.active_pet != null:
+		var nm := str(PetController.active_pet.name)
+		if PetController.active_pet.is_sleeping():
+			return "Welcome back · %s is sleeping" % nm
+		return "Welcome back · %s" % nm
+	return raw if raw != "" else "Welcome back"
+
+
+func _short_session_body(snap: Dictionary) -> String:
+	var parts: Array[String] = []
+	var away_label := str(snap.get("away_label", ""))
+	var away_sec := float(snap.get("away_sec", 0.0))
+	if away_sec >= 60.0 and away_label != "":
+		parts.append("Away %s." % away_label)
+	var sug: Dictionary = snap.get("suggest", {}) as Dictionary
+	var sug_l := str(sug.get("label", ""))
+	if sug_l == "" and snap.has("body"):
+		# Fallback: first non-empty line of body that looks like a suggestion
+		for line in str(snap.get("body", "")).split("\n"):
+			var t := line.strip_edges()
+			if t == "" or t.begins_with("You were away"):
+				continue
+			sug_l = t
+			break
+	if sug_l != "":
+		parts.append(sug_l)
+	if parts.is_empty():
+		return "Check their needs when ready."
+	return " ".join(parts)
 
 
 func _hide_session_banner() -> void:
@@ -1078,11 +1119,15 @@ func _at_door(rect: Rect2) -> bool:
 func _process(delta: float) -> void:
 	_zzz_t += delta
 	_tick_stat_flashes(delta)
+	_tick_toast(delta)
 	if _session_ttl > 0.0:
 		_session_ttl -= delta
 		_place_session_banner()
 		if _session_ttl <= 0.0:
 			_hide_session_banner()
+	# Refresh day/night chip occasionally (cheap)
+	if int(_zzz_t * 2.0) % 4 == 0:
+		_refresh_day_chip()
 	_update_near_pet_ui()
 	_update_zzz()
 	_update_emote(delta)
@@ -1398,7 +1443,57 @@ func _dbg(sec: float) -> void:
 
 
 func _show_toast(msg: String) -> void:
-	_toast.text = msg
+	if _toast == null:
+		return
+	var text := msg.strip_edges()
+	if text == "":
+		_clear_toast()
+		return
+	# Cap length so stale multi-line walls never stick
+	if text.length() > 96:
+		text = text.substr(0, 93) + "…"
+	_toast.text = text
+	_toast.visible = true
+	_toast.modulate = Color(1, 1, 1, 1)
+	_toast_ttl = TOAST_DURATION
+
+
+func _tick_toast(delta: float) -> void:
+	if _toast == null or _toast_ttl <= 0.0:
+		return
+	_toast_ttl -= delta
+	# Fade in the last third of the window
+	if _toast_ttl < TOAST_DURATION * 0.35:
+		var a := clampf(_toast_ttl / (TOAST_DURATION * 0.35), 0.0, 1.0)
+		_toast.modulate.a = a
+	if _toast_ttl <= 0.0:
+		_clear_toast()
+
+
+func _clear_toast() -> void:
+	_toast_ttl = 0.0
+	if _toast == null:
+		return
+	_toast.text = ""
+	_toast.visible = false
+	_toast.modulate = Color(1, 1, 1, 1)
+
+
+func _refresh_day_chip() -> void:
+	if _day_chip == null:
+		return
+	var phase := str(TimeService.local_day_phase())
+	match phase:
+		"dawn":
+			_day_chip.text = "Dawn"
+		"day":
+			_day_chip.text = "Day"
+		"dusk":
+			_day_chip.text = "Dusk"
+		"night":
+			_day_chip.text = "Night"
+		_:
+			_day_chip.text = phase.capitalize()
 
 
 func _on_pet_updated(_snap: Dictionary) -> void:

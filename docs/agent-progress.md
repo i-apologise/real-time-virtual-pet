@@ -27,3 +27,6 @@
 | 2026-07-04 | STARTED PR2 care juice after PR1 merge |
 | 2026-07-04 | NEEDS REVIEW: PR #23 — https://github.com/i-apologise/real-time-virtual-pet/pull/23 |
 | 2026-07-04 | PR1 #22 session summary/cooldowns MERGED; opened Priority 2 juice/emotes as #23. Tests 14/14 PASS. |
+
+| 2026-07-05 | P0 #26 MERGED; opened **PR #27** UI P1 feedback/calm. Tests 15/15 PASS. |
+| 2026-07-05 | NEEDS REVIEW: PR #27 — https://github.com/i-apologise/real-time-virtual-pet/pull/27 |

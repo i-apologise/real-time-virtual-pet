@@ -4,6 +4,7 @@ extends Node2D
 const SpriteFactoryScr = preload("res://src/gameplay/sprite_factory.gd")
 const AnimatedActorScr = preload("res://src/gameplay/animated_actor.gd")
 const AmbientWalkerScr = preload("res://src/gameplay/ambient_walker.gd")
+const UiThemeScr = preload("res://src/ui/ui_theme.gd")
 
 const LAYER_WORLD := 1
 const WORLD_BOUNDS := Rect2(28, 28, 584, 344)
@@ -158,26 +159,35 @@ func _build() -> void:
 
 	var layer := CanvasLayer.new()
 	add_child(layer)
-	_label = Label.new()
-	_label.position = Vector2(8, 8)
-	_label.add_theme_font_size_override("font_size", 13)
-	_label.add_theme_color_override("font_color", Color.WHITE)
-	_label.text = "Pet Park — paths · E Enter Town (south)"
-	layer.add_child(_label)
-	_toast = Label.new()
-	_toast.position = Vector2(8, 30)
-	_toast.modulate = Color(1, 1, 0.7)
+	var top := PanelContainer.new()
+	UiThemeScr.apply_panel(top, true)
+	top.position = Vector2(10, 8)
+	layer.add_child(top)
+	var top_v := VBoxContainer.new()
+	top_v.add_theme_constant_override("separation", 2)
+	top.add_child(top_v)
+	_label = UiThemeScr.title_label("Pet Park — paths · E Enter Town (south)", 12)
+	top_v.add_child(_label)
+	var bonus_hint := UiThemeScr.body_label("Outdoor bonus: play here while leashed for extra happiness.", 11)
+	bonus_hint.custom_minimum_size = Vector2(340, 0)
+	top_v.add_child(bonus_hint)
+	_toast = UiThemeScr.toast_label("")
+	_toast.position = Vector2(10, 72)
 	layer.add_child(_toast)
-	var back := Button.new()
-	back.text = "Leave to Town"
-	back.position = Vector2(8, 54)
+	var actions := PanelContainer.new()
+	UiThemeScr.apply_panel(actions, true)
+	actions.position = Vector2(10, 100)
+	layer.add_child(actions)
+	var av := VBoxContainer.new()
+	av.add_theme_constant_override("separation", 6)
+	actions.add_child(av)
+	var back := UiThemeScr.themed_button("Leave to Town")
 	back.pressed.connect(func(): SceneRouter.go("town", "from_park"))
-	layer.add_child(back)
-	var fetch := Button.new()
-	fetch.text = "Play fetch (+park bonus)"
-	fetch.position = Vector2(8, 88)
+	av.add_child(back)
+	# P3: Play fetch as themed action chip + outdoor bonus is explained above
+	var fetch := UiThemeScr.themed_button("Play fetch  ·  outdoor bonus")
 	fetch.pressed.connect(_try_park_play)
-	layer.add_child(fetch)
+	av.add_child(fetch)
 
 
 func _maybe_escort() -> void:

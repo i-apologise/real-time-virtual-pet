@@ -3,6 +3,7 @@ extends Node2D
 
 const SpriteFactoryScr = preload("res://src/gameplay/sprite_factory.gd")
 const AnimatedActorScr = preload("res://src/gameplay/animated_actor.gd")
+const UiThemeScr = preload("res://src/ui/ui_theme.gd")
 
 const LAYER_WORLD := 1
 const WORLD_BOUNDS := Rect2(28, 36, 584, 328)
@@ -217,65 +218,42 @@ func _add_pen(center: Vector2, species_id: StringName, title: String, mat_color:
 	})
 
 
-func _style_panel() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.98, 0.96, 0.92)
-	sb.border_color = Color(0.15, 0.12, 0.1)
-	sb.set_border_width_all(3)
-	sb.set_corner_radius_all(8)
-	sb.content_margin_left = 14
-	sb.content_margin_right = 14
-	sb.content_margin_top = 12
-	sb.content_margin_bottom = 12
-	sb.shadow_size = 8
-	sb.shadow_color = Color(0, 0, 0, 0.35)
-	return sb
-
-
 func _build_ui() -> void:
 	_ui_layer = CanvasLayer.new()
 	_ui_layer.layer = 40
 	add_child(_ui_layer)
 
-	_label = Label.new()
-	_label.position = Vector2(8, 8)
-	_label.add_theme_font_size_override("font_size", 13)
-	_label.add_theme_color_override("font_color", Color.WHITE)
-	_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
-	_label.add_theme_constant_override("outline_size", 3)
-	_label.text = "Paw & Co. Pet Store — browse pens · adopt at Reception"
-	_ui_layer.add_child(_label)
+	var top := PanelContainer.new()
+	UiThemeScr.apply_panel(top, true)
+	top.position = Vector2(10, 8)
+	_ui_layer.add_child(top)
+	_label = UiThemeScr.title_label("Paw & Co. — E View pen · E Open reception", 12)
+	top.add_child(_label)
 
-	_toast = Label.new()
-	_toast.position = Vector2(8, 30)
-	_toast.add_theme_font_size_override("font_size", 12)
-	_toast.modulate = Color(1, 0.95, 0.55)
+	_toast = UiThemeScr.toast_label("")
+	_toast.position = Vector2(10, 48)
 	_ui_layer.add_child(_toast)
 
-	var leave := Button.new()
-	leave.text = "Leave store"
-	leave.position = Vector2(8, 54)
+	var leave := UiThemeScr.themed_button("Leave store")
+	leave.position = Vector2(10, 72)
 	leave.pressed.connect(func(): SceneRouter.go("town", "from_store"))
 	_ui_layer.add_child(leave)
 
-	# Care-points shop (supplies)
+	# Care-points shop (supplies) — P3 clear Shop card title
 	var shop := PanelContainer.new()
-	shop.add_theme_stylebox_override("panel", _style_panel())
-	shop.position = Vector2(8, 100)
+	UiThemeScr.apply_panel(shop, true)
+	shop.position = Vector2(10, 108)
 	_ui_layer.add_child(shop)
 	var shop_v := VBoxContainer.new()
 	shop_v.add_theme_constant_override("separation", 6)
 	shop.add_child(shop_v)
-	var shop_title := Label.new()
-	shop_title.add_theme_font_size_override("font_size", 15)
-	shop_title.add_theme_color_override("font_color", Color(0.12, 0.1, 0.08))
-	shop_title.text = "Supplies · Care points: %d" % PetController.profile.care_points
+	var shop_title := UiThemeScr.title_label("Shop · Care points (❤)", 15)
 	shop_title.name = "ShopTitle"
 	shop_v.add_child(shop_title)
 	set_meta("shop_title", shop_title)
-	var inv_lab := Label.new()
-	inv_lab.add_theme_font_size_override("font_size", 11)
-	inv_lab.add_theme_color_override("font_color", Color(0.25, 0.2, 0.15))
+	var shop_sub := UiThemeScr.accent_label("Spend points earned by caring at home & park", 11)
+	shop_v.add_child(shop_sub)
+	var inv_lab := UiThemeScr.body_label("", 11)
 	inv_lab.name = "InvLab"
 	shop_v.add_child(inv_lab)
 	set_meta("inv_lab", inv_lab)
@@ -284,51 +262,42 @@ func _build_ui() -> void:
 		["soap", "Gentle Soap · 10❤", "Next clean +15 hygiene"],
 		["chew_toy", "Chew Toy · 25❤", "Permanent play +6 happy"],
 	]:
-		var b := Button.new()
-		b.text = str(item[1])
+		var b := UiThemeScr.themed_button(str(item[1]))
 		b.tooltip_text = str(item[2])
 		var iid: String = str(item[0])
 		b.pressed.connect(func(): _buy_item(iid))
 		shop_v.add_child(b)
 	_refresh_shop_labels()
 
-	# Adopt modal
+	# Adopt modal — same chrome family
 	_adopt_panel = PanelContainer.new()
 	_adopt_panel.visible = false
-	_adopt_panel.add_theme_stylebox_override("panel", _style_panel())
+	UiThemeScr.apply_panel(_adopt_panel, true)
 	_adopt_panel.position = Vector2(360, 120)
 	_ui_layer.add_child(_adopt_panel)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	_adopt_panel.add_child(v)
-	_adopt_title = Label.new()
-	_adopt_title.add_theme_font_size_override("font_size", 18)
-	_adopt_title.add_theme_color_override("font_color", Color(0.1, 0.08, 0.06))
+	_adopt_title = UiThemeScr.title_label("", 18)
 	v.add_child(_adopt_title)
-	_blocked_label = Label.new()
-	_blocked_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_blocked_label = UiThemeScr.body_label("", 12)
 	_blocked_label.custom_minimum_size = Vector2(280, 0)
-	_blocked_label.add_theme_font_size_override("font_size", 12)
-	_blocked_label.add_theme_color_override("font_color", Color(0.35, 0.25, 0.15))
 	v.add_child(_blocked_label)
 	var name_row := HBoxContainer.new()
 	v.add_child(name_row)
-	var nl := Label.new()
-	nl.text = "Name:"
-	nl.add_theme_color_override("font_color", Color(0.1, 0.1, 0.1))
+	var nl := UiThemeScr.title_label("Name:", 12)
 	name_row.add_child(nl)
 	_name_edit = LineEdit.new()
 	_name_edit.custom_minimum_size = Vector2(160, 0)
 	_name_edit.placeholder_text = "2–16 letters"
 	name_row.add_child(_name_edit)
 	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
 	v.add_child(row)
-	var adopt_btn := Button.new()
-	adopt_btn.text = "Adopt companion"
+	var adopt_btn := UiThemeScr.themed_button("Adopt companion")
 	adopt_btn.pressed.connect(_confirm_adopt)
 	row.add_child(adopt_btn)
-	var cancel := Button.new()
-	cancel.text = "Close"
+	var cancel := UiThemeScr.themed_button("Close")
 	cancel.pressed.connect(func(): _adopt_panel.visible = false)
 	row.add_child(cancel)
 
@@ -389,7 +358,7 @@ func _refresh_shop_labels() -> void:
 	var st: Label = get_meta("shop_title") as Label if has_meta("shop_title") else null
 	var inv: Label = get_meta("inv_lab") as Label if has_meta("inv_lab") else null
 	if st:
-		st.text = "Supplies · Care points: %d❤" % PetController.profile.care_points
+		st.text = "Shop · Care points: %d❤" % PetController.profile.care_points
 	if inv:
 		var p = PetController.profile
 		inv.text = "Bag: food×%d  soap×%d  toy×%d" % [

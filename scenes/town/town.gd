@@ -200,7 +200,7 @@ func _maybe_spawn_escort_pet() -> void:
 	_pet.set_follow(_human, Vector2(-22, 10))
 	_pet.set_world_bounds(WORLD_BOUNDS)
 	_leash.visible = true
-	_toast.text = "On leash — E Enter Park/House · end walk at home near pet"
+	_toast.text = "On leash — E on doorsteps enters (pet follows). End walk off doors."
 
 
 func _process(delta: float) -> void:
@@ -214,6 +214,32 @@ func _process(delta: float) -> void:
 				_world.to_local(_human.global_position + Vector2(4, -10)),
 				_world.to_local(_pet.global_position + Vector2(0, -8)),
 			])
+
+	# Resolve nearest building first — leash follow is always <56px, so end-walk
+	# must not consume E while standing on a doorstep (same bug as habitat town door).
+	var near := ""
+	var scene_id := ""
+	var spawn := ""
+	for poi in _pois:
+		if _human.global_position.distance_to(poi["pos"]) <= POI_RADIUS:
+			near = str(poi["title"])
+			scene_id = str(poi["scene_id"])
+			spawn = str(poi.get("spawn", ""))
+			break
+
+	if near != "":
+		if PetController.escort_active:
+			_label.text = "E Enter %s (pet follows)" % near
+		else:
+			_label.text = "E Enter %s" % near
+		if scene_id != "" and Input.is_action_just_pressed("interact"):
+			SceneRouter.go(scene_id, spawn)
+		return
+
+	if PetController.escort_active:
+		_label.text = "On leash — E Enter Park/House/Store · away from doors E End walk · min %.0fs" % maxf(
+			0.0, PetController.ESCORT_MIN_SEC - PetController.escort_elapsed_sec
+		)
 		if Input.is_action_just_pressed("interact") and _pet:
 			if _human.global_position.distance_to(_pet.global_position) < 56.0:
 				if PetController.can_finish_escort():
@@ -228,25 +254,6 @@ func _process(delta: float) -> void:
 					_toast.text = "Walk a bit longer… %.0fs" % maxf(
 						0.0, PetController.ESCORT_MIN_SEC - PetController.escort_elapsed_sec
 					)
-				return
+		return
 
-	var near := ""
-	var scene_id := ""
-	var spawn := ""
-	for poi in _pois:
-		if _human.global_position.distance_to(poi["pos"]) <= POI_RADIUS:
-			near = str(poi["title"])
-			scene_id = str(poi["scene_id"])
-			spawn = str(poi.get("spawn", ""))
-			break
-	if near != "":
-		_label.text = "E Enter %s" % near
-		if scene_id != "" and Input.is_action_just_pressed("interact"):
-			SceneRouter.go(scene_id, spawn)
-	else:
-		if PetController.escort_active:
-			_label.text = "On leash — E Enter Park/House/Store · walk min %.0fs" % maxf(
-				0.0, PetController.ESCORT_MIN_SEC - PetController.escort_elapsed_sec
-			)
-		else:
-			_label.text = "Town — E Enter House · Park · Store"
+	_label.text = "Town — E Enter House · Park · Store"

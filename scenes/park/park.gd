@@ -221,7 +221,20 @@ func _process(delta: float) -> void:
 				_world.to_local(_human.global_position + Vector2(4, -10)),
 				_world.to_local(_pet.global_position),
 			])
-		_label.text = "On leash · min %.0fs · E End walk near pet · E Enter Town" % maxf(
+
+	# Exit zone before end-walk — following pet is always "near", same as habitat/town.
+	if EXIT_TO_TOWN.has_point(_human.position):
+		_label.text = (
+			"E Enter Town (pet follows)"
+			if PetController.escort_active
+			else "E Enter Town"
+		)
+		if Input.is_action_just_pressed("interact"):
+			SceneRouter.go("town", "from_park")
+		return
+
+	if PetController.escort_active:
+		_label.text = "On leash · min %.0fs · E End walk (not on exit) · fetch for bonus" % maxf(
 			0.0, PetController.ESCORT_MIN_SEC - PetController.escort_elapsed_sec
 		)
 		if Input.is_action_just_pressed("interact") and _pet:
@@ -237,12 +250,7 @@ func _process(delta: float) -> void:
 					_toast.text = "A bit more walking… %.0fs" % maxf(
 						0.0, PetController.ESCORT_MIN_SEC - PetController.escort_elapsed_sec
 					)
-				return
-
-	if EXIT_TO_TOWN.has_point(_human.position):
-		_label.text = "E Enter Town"
-		if Input.is_action_just_pressed("interact"):
-			SceneRouter.go("town", "from_park")
+		return
 
 
 func _try_park_play() -> void:

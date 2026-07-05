@@ -17,6 +17,8 @@ var _world: Node2D
 var _label: Label
 var _toast: Label
 var _camera: Camera2D
+var _pet: CharacterBody2D
+var _leash: Line2D
 
 # Pens: {pos, species_id, display, actor}
 var _pens: Array = []
@@ -37,6 +39,7 @@ func _ready() -> void:
 	_build_store()
 	_build_ui()
 	_apply_spawn()
+	_maybe_spawn_escort_pet()
 
 
 func _apply_spawn() -> void:
@@ -407,7 +410,33 @@ func _confirm_adopt() -> void:
 			audio2.play("care_fail")
 
 
-func _process(_delta: float) -> void:
+func _maybe_spawn_escort_pet() -> void:
+	## Leashed walk used to drop the pet and freeze the walk timer in the store.
+	if not PetController.escort_active:
+		return
+	if PetController.active_pet == null or str(PetController.active_pet.life_state) == "DEAD":
+		PetController.escort_active = false
+		return
+	_leash = Line2D.new()
+	_leash.width = 2.8
+	_leash.default_color = Color("6D4C41")
+	_leash.z_index = 80
+	_world.add_child(_leash)
+	_pet = AnimatedActorScr.new()
+	_pet.is_pet = true
+	_pet.is_player_controlled = false
+	_pet.move_speed = 100.0
+	_pet.position = _human.position + Vector2(-22, 10)
+	_world.add_child(_pet)
+	_pet.setup_frames(SpriteFactoryScr.pet_frames(String(PetController.active_pet.species_id)), 2.0)
+	_pet.set_collision_enabled(false)
+	_pet.set_follow(_human, Vector2(-22, 10))
+	_pet.set_world_bounds(WORLD_BOUNDS)
+	_leash.visible = true
+	_toast.text = "On leash — shop or leave via EXIT (E). End walk outside (not on doors)."
+
+
+func _process(delta: float) -> void:
 	if _human == null:
 		return
 	_refresh_shop_labels()
@@ -416,6 +445,15 @@ func _process(_delta: float) -> void:
 		var a: Node = pen.get("actor")
 		if a and a.has_method("play_anim") and randf() < 0.002:
 			a.play_anim(&"happy" if randf() > 0.5 else &"idle")
+
+	if PetController.escort_active:
+		PetController.tick_escort(delta)
+		if _pet and _leash:
+			_leash.visible = true
+			_leash.points = PackedVector2Array([
+				_world.to_local(_human.global_position + Vector2(4, -10)),
+				_world.to_local(_pet.global_position + Vector2(0, -8)),
+			])
 
 	_near_reception = RECEPTION_ZONE.has_point(_human.position)
 	_near_pen = {}
@@ -426,10 +464,17 @@ func _process(_delta: float) -> void:
 
 	if _adopt_panel.visible:
 		_label.text = "Choosing a companion — Close or Adopt"
+		if Input.is_action_just_pressed("ui_cancel"):
+			_adopt_panel.visible = false
 		return
 
+	# Exit / hotspots before any end-walk style E (pet always in range while leashed)
 	if EXIT_DOOR.has_point(_human.position):
-		_label.text = "E Leave store → Town"
+		_label.text = (
+			"E Leave store → Town (pet follows)"
+			if PetController.escort_active
+			else "E Leave store → Town"
+		)
 		if Input.is_action_just_pressed("interact"):
 			SceneRouter.go("town", "from_store")
 		return
@@ -446,7 +491,9 @@ func _process(_delta: float) -> void:
 			_open_reception()
 		return
 
-	_label.text = "Store — E View pen · E Open reception · E Leave (south)"
-
-	if Input.is_action_just_pressed("ui_cancel") and _adopt_panel.visible:
-		_adopt_panel.visible = false
+	if PetController.escort_active:
+		_label.text = "On leash in store · min %.0fs · EXIT south · end walk in town/home" % maxf(
+			0.0, PetController.ESCORT_MIN_SEC - PetController.escort_elapsed_sec
+		)
+	else:
+		_label.text = "Store — E View pen · E Open reception · E Leave (south)"

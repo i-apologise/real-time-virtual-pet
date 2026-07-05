@@ -43,13 +43,13 @@ func _ready() -> void:
 	body.add_theme_color_override("font_color", Color("E8F0E0"))
 	body.text = (
 		"1. Adopt a pet at the Pet Store (you'll go there next).\n\n"
-		+ "2. Walk with WASD. Press E near doors and buildings.\n\n"
-		+ "3. In your House, walk near your pet to see how they feel.\n\n"
-		+ "4. Press 1–6 (or the care buttons) to feed, walk, play, clean, sleep.\n"
-		+ "   Your character walks over and performs the action.\n\n"
+		+ "2. Walk with WASD. Press E at doorsteps and buildings (House, Park, Store).\n\n"
+		+ "3. At home, walk near your pet — E opens the CARE menu (feed, walk, play,\n"
+		+ "   clean, sleep, wake). Click a row or use ↑↓ and Z/Enter. X closes.\n\n"
+		+ "4. Caring earns ❤ care points — spend them on supplies at the Pet Store.\n\n"
 		+ "5. Time is real — needs drop even when the game is closed.\n"
-		+ "   Neglect long enough and your pet can die. Dig a grave. Adopt again.\n\n"
-		+ "Humans never die. Only pets have needs."
+		+ "   Neglect long enough and your pet can die. Backyard dig. Adopt again.\n\n"
+		+ "Esc opens Settings (mute sound). Humans never die — only pets have needs."
 	)
 	v.add_child(body)
 

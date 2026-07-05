@@ -53,6 +53,10 @@ var _session_title: Label
 var _session_body: Label
 var _session_ttl: float = 0.0
 
+# Settings stub (mute SFX/ambient) — P2
+var _settings_panel: PanelContainer
+var _settings_sound_check: CheckButton
+
 # Pokemon-style vertical care menu (bottom-left)
 var _care_panel: PanelContainer
 var _care_list: VBoxContainer
@@ -599,7 +603,7 @@ func _build_hud() -> void:
 	_care_panel.add_child(care_outer)
 	var care_title := UiThemeScr.title_label("CARE", 18)
 	care_outer.add_child(care_title)
-	var help := UiThemeScr.body_label("↑↓ move · Z/Enter · X cancel", 11)
+	var help := UiThemeScr.body_label("Click row · ↑↓ · Z/Enter · X cancel", 11)
 	care_outer.add_child(help)
 	_care_list = VBoxContainer.new()
 	_care_list.add_theme_constant_override("separation", 3)
@@ -610,7 +614,10 @@ func _build_hud() -> void:
 	for i in names.size():
 		var row_p := PanelContainer.new()
 		row_p.custom_minimum_size = Vector2(168, 28)
+		row_p.mouse_filter = Control.MOUSE_FILTER_STOP
+		row_p.gui_input.connect(_on_care_row_gui_input.bind(i))
 		var lab2 := Label.new()
+		lab2.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		lab2.add_theme_font_size_override("font_size", 16)
 		lab2.add_theme_color_override("font_color", Color(0.08, 0.08, 0.10))
 		lab2.text = "  " + names[i]
@@ -657,6 +664,10 @@ func _build_hud() -> void:
 	var b_yard := UiThemeScr.themed_button("Yard")
 	b_yard.pressed.connect(func(): SceneRouter.go("graveyard", "from_house"))
 	nav.add_child(b_yard)
+	var b_settings := UiThemeScr.themed_button("Settings")
+	b_settings.pressed.connect(_toggle_settings)
+	nav.add_child(b_settings)
+	_build_settings_panel(layer)
 	var b_store := UiThemeScr.themed_button("Store")
 	b_store.pressed.connect(func(): SceneRouter.go("pet_store", "from_town"))
 	nav.add_child(b_store)
@@ -1361,6 +1372,89 @@ func _bar_color(v: float) -> Color:
 	return Color(0.55, 1.0, 0.55)
 
 
+func _on_care_row_gui_input(event: InputEvent, index: int) -> void:
+	## P2: mouse-playable CARE rows (click selects + confirms).
+	if not _care_menu_open:
+		return
+	if not (event is InputEventMouseButton):
+		return
+	var mb := event as InputEventMouseButton
+	if not mb.pressed or mb.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if index < 0 or index >= _care_actions.size():
+		return
+	_care_cursor = index
+	_refresh_care_cursor()
+	_confirm_care_selection()
+	get_viewport().set_input_as_handled()
+
+
+func _build_settings_panel(layer: CanvasLayer) -> void:
+	_settings_panel = PanelContainer.new()
+	_settings_panel.visible = false
+	UiThemeScr.apply_panel(_settings_panel, true)
+	layer.add_child(_settings_panel)
+	var sv := VBoxContainer.new()
+	sv.add_theme_constant_override("separation", 8)
+	_settings_panel.add_child(sv)
+	sv.add_child(UiThemeScr.title_label("Settings", 16))
+	sv.add_child(UiThemeScr.body_label("Sound & quick controls", 11))
+	_settings_sound_check = CheckButton.new()
+	_settings_sound_check.text = "SFX + ambient"
+	_settings_sound_check.button_pressed = true
+	var audio := get_node_or_null("/root/AudioService")
+	if audio and audio.has_method("is_enabled"):
+		_settings_sound_check.button_pressed = bool(audio.call("is_enabled"))
+	_settings_sound_check.toggled.connect(_on_settings_sound_toggled)
+	sv.add_child(_settings_sound_check)
+	sv.add_child(UiThemeScr.body_label(
+		"WASD move · E interact / doors · near pet E CARE\nEsc settings · F3 debug",
+		11
+	))
+	var close_b := UiThemeScr.themed_button("Close (Esc)")
+	close_b.pressed.connect(_hide_settings)
+	sv.add_child(close_b)
+	call_deferred("_place_settings")
+
+
+func _on_settings_sound_toggled(on: bool) -> void:
+	var audio := get_node_or_null("/root/AudioService")
+	if audio and audio.has_method("set_enabled"):
+		audio.call("set_enabled", on)
+		if on and audio.has_method("start_ambient"):
+			audio.call("start_ambient")
+
+
+func _toggle_settings() -> void:
+	if _settings_panel and _settings_panel.visible:
+		_hide_settings()
+	else:
+		_show_settings()
+
+
+func _show_settings() -> void:
+	if _settings_panel == null:
+		return
+	# Sync checkbox with live audio state
+	var audio := get_node_or_null("/root/AudioService")
+	if _settings_sound_check and audio and audio.has_method("is_enabled"):
+		_settings_sound_check.set_pressed_no_signal(bool(audio.call("is_enabled")))
+	_settings_panel.visible = true
+	_place_settings()
+
+
+func _hide_settings() -> void:
+	if _settings_panel:
+		_settings_panel.visible = false
+
+
+func _place_settings() -> void:
+	if _settings_panel == null:
+		return
+	var vp := get_viewport().get_visible_rect().size
+	_settings_panel.position = Vector2(vp.x * 0.5 - 150.0, vp.y * 0.5 - 90.0)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
@@ -1390,6 +1484,12 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if _session_panel and _session_panel.visible and (k.keycode == KEY_ESCAPE or k.keycode == KEY_X):
 		_hide_session_banner()
+		return
+	if _settings_panel and _settings_panel.visible and (k.keycode == KEY_ESCAPE or k.keycode == KEY_X):
+		_hide_settings()
+		return
+	if k.keycode == KEY_ESCAPE:
+		_toggle_settings()
 		return
 	if k.keycode == KEY_F3:
 		_debug_visible = not _debug_visible

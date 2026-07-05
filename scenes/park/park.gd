@@ -162,7 +162,7 @@ func _build() -> void:
 	_label.position = Vector2(8, 8)
 	_label.add_theme_font_size_override("font_size", 13)
 	_label.add_theme_color_override("font_color", Color.WHITE)
-	_label.text = "Pet Park — walk the paths · south gate → Town"
+	_label.text = "Pet Park — paths · E Enter Town (south)"
 	layer.add_child(_label)
 	_toast = Label.new()
 	_toast.position = Vector2(8, 30)
@@ -197,7 +197,7 @@ func _maybe_escort() -> void:
 	_pet.set_follow(_human, Vector2(-22, 10))
 	_pet.set_world_bounds(WORLD_BOUNDS)
 	_leash.visible = true
-	_toast.text = "Leashed in the park! Explore · E near pet to finish walk (after min time)"
+	_toast.text = "On leash — explore · E End walk near pet (after min time)"
 
 
 func _process(delta: float) -> void:
@@ -210,7 +210,7 @@ func _process(delta: float) -> void:
 				_world.to_local(_human.global_position + Vector2(4, -10)),
 				_world.to_local(_pet.global_position),
 			])
-		_label.text = "Park (leashed) · walk min %.0fs · E near pet to end · south gate Town" % maxf(
+		_label.text = "On leash · min %.0fs · E End walk near pet · E Enter Town" % maxf(
 			0.0, PetController.ESCORT_MIN_SEC - PetController.escort_elapsed_sec
 		)
 		if Input.is_action_just_pressed("interact") and _pet:
@@ -229,7 +229,7 @@ func _process(delta: float) -> void:
 				return
 
 	if EXIT_TO_TOWN.has_point(_human.position):
-		_label.text = "Town gate — press E"
+		_label.text = "E Enter Town"
 		if Input.is_action_just_pressed("interact"):
 			SceneRouter.go("town", "from_park")
 

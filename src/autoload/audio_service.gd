@@ -39,12 +39,35 @@ func _ready() -> void:
 		p.volume_db = _sfx_volume_db
 		add_child(p)
 		_pool.append(p)
+	_load_prefs()
+
+
+func is_enabled() -> bool:
+	return _enabled
 
 
 func set_enabled(v: bool) -> void:
 	_enabled = v
 	if not v and _ambient:
 		_ambient.stop()
+	elif v:
+		# Ambient resumes only if a scene already started it; leave to callers.
+		pass
+	_save_prefs()
+
+
+func _load_prefs() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load("user://settings.cfg") != OK:
+		return
+	_enabled = bool(cfg.get_value("audio", "enabled", true))
+
+
+func _save_prefs() -> void:
+	var cfg := ConfigFile.new()
+	cfg.load("user://settings.cfg")  # merge if present
+	cfg.set_value("audio", "enabled", _enabled)
+	cfg.save("user://settings.cfg")
 
 
 func play(id: String, pitch_scale: float = 1.0, volume_db: float = 999.0) -> void:

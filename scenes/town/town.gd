@@ -172,7 +172,7 @@ func _build_world() -> void:
 	_label.position = Vector2(8, 6)
 	_label.add_theme_font_size_override("font_size", 12)
 	_label.add_theme_color_override("font_color", Color.WHITE)
-	_label.text = "Town — WASD · E at doorsteps · Park / Store / House"
+	_label.text = "Town — WASD · E Enter building"
 	layer.add_child(_label)
 	_toast = Label.new()
 	_toast.position = Vector2(8, 28)
@@ -200,7 +200,7 @@ func _maybe_spawn_escort_pet() -> void:
 	_pet.set_follow(_human, Vector2(-22, 10))
 	_pet.set_world_bounds(WORLD_BOUNDS)
 	_leash.visible = true
-	_toast.text = "Leashed walk — visit Park or go home · E near pet at home to finish"
+	_toast.text = "On leash — E Enter Park/House · end walk at home near pet"
 
 
 func _process(delta: float) -> void:
@@ -240,13 +240,13 @@ func _process(delta: float) -> void:
 			spawn = str(poi.get("spawn", ""))
 			break
 	if near != "":
-		_label.text = "Near %s — press E" % near
+		_label.text = "E Enter %s" % near
 		if scene_id != "" and Input.is_action_just_pressed("interact"):
 			SceneRouter.go(scene_id, spawn)
 	else:
 		if PetController.escort_active:
-			_label.text = "Town (leashed) — Park / House / Store · walk min remaining %.0fs" % maxf(
+			_label.text = "On leash — E Enter Park/House/Store · walk min %.0fs" % maxf(
 				0.0, PetController.ESCORT_MIN_SEC - PetController.escort_elapsed_sec
 			)
 		else:
-			_label.text = "Town — doorsteps + E · House · Pet Park · Pet Store"
+			_label.text = "Town — E Enter House · Park · Store"

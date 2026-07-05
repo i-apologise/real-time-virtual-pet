@@ -45,3 +45,4 @@
 
 | 2026-07-05 | **Mission complete:** P0–P4 UI polish MERGED (#26–#30). Tests 15/15 on each PR. |
 NEEDS REVIEW: PR #31 — https://github.com/i-apologise/real-time-virtual-pet/pull/31
+MERGED: PR #31 — https://github.com/i-apologise/real-time-virtual-pet/pull/31

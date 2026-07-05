@@ -1,5 +1,6 @@
 # Needs your review
 
-No open PRs from the UI polish agent chain.
+No open PRs awaiting review.
 
-**Completed:** P0 #26 · P1 #27 · P2 #28 · P3 #29 · P4 #30 — all **MERGED**.
+Last merged: **PR #31** — fix: leash walk — E on doors enters (not end walk)  
+https://github.com/i-apologise/real-time-virtual-pet/pull/31

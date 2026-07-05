@@ -12,6 +12,7 @@ A **Tamagotchi-style** life sim in **Godot 4**: you play an **invincible human**
 | **Playtest notes** | [`docs/PLAYTEST-REVIEW-2026-07.md`](docs/PLAYTEST-REVIEW-2026-07.md) |
 | **UX backlog** | [`docs/UX-POLISH-CHECKLIST.md`](docs/UX-POLISH-CHECKLIST.md) |
 | **Public release plan** | [`docs/PUBLIC-RELEASE-POLISH-PLAN.md`](docs/PUBLIC-RELEASE-POLISH-PLAN.md) (v0.2 track) |
+| **UX/UI polish plan** | [`docs/UX-UI-POLISH-PLAN.md`](docs/UX-UI-POLISH-PLAN.md) |
 
 ---
 

@@ -1,6 +1,8 @@
 # Needs your review
 
-- **PR #26** — UI P0: shared theme kit + home HUD hierarchy
-  https://github.com/i-apologise/real-time-virtual-pet/pull/26
+- **PR #27** — UI P1: feedback & calmness (toast TTL, session, emotes)
+  https://github.com/i-apologise/real-time-virtual-pet/pull/27
 
-After merge, agent chain continues **P1 → P2 → P3 → P4** (each its own PR).
+After merge, agent chain continues **P2 → P3 → P4** (each its own PR).
+
+Prior: P0 **#26** MERGED.

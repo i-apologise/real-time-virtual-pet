@@ -1,8 +1,15 @@
 # Needs your review
 
-- **PR #30** — UI P4: a11y microcopy (first tips, no raw enums)
-  https://github.com/i-apologise/real-time-virtual-pet/pull/30
+**No open UX polish PRs.**
 
-This is the **final** PR in the UI polish chain P0→P4.
+UI polish chain **P0–P4 complete** on `main`:
 
-Prior: P0 **#26** · P1 **#27** · P2 **#28** · P3 **#29** MERGED.
+| PR | Scope | Status |
+|----|--------|--------|
+| #26 | P0 baseline HUD/chrome | MERGED |
+| #27 | P1 feedback/calm | MERGED |
+| #28 | P2 input/settings | MERGED |
+| #29 | P3 cross-scene chrome | MERGED |
+| #30 | P4 a11y microcopy | MERGED |
+
+Final PR: https://github.com/i-apologise/real-time-virtual-pet/pull/30

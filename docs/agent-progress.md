@@ -39,3 +39,6 @@
 
 | 2026-07-05 | P3 #29 MERGED; opened **PR #30** UI P4 a11y microcopy. Tests 15/15 PASS. |
 | 2026-07-05 | NEEDS REVIEW: PR #30 — https://github.com/i-apologise/real-time-virtual-pet/pull/30 |
+
+| 2026-07-05 | MERGED: PR #30 — https://github.com/i-apologise/real-time-virtual-pet/pull/30 |
+| 2026-07-05 | UI polish P0–P4 chain complete on main. No open UX polish PRs. |

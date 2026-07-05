@@ -169,6 +169,13 @@ func request_care(action: StringName, ctx: Dictionary = {}) -> Dictionary:
 		profile.add_care_points(pts)
 		result["care_points_earned"] = pts
 		result["care_points_total"] = profile.care_points
+		# P4: one-shot discovery toasts (meta flags, presentation only)
+		if pts > 0 and not bool(meta.get("seen_care_points_tip", false)):
+			meta["seen_care_points_tip"] = true
+			result["first_care_points_toast"] = true
+		if bool(care_ctx.get("outdoor_park", false)) and not bool(meta.get("seen_park_bonus_tip", false)):
+			meta["seen_park_bonus_tip"] = true
+			result["first_park_bonus_toast"] = true
 		EventBus.care_performed.emit(action, result)
 		_save_atomic()
 		publish()

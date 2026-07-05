@@ -4,6 +4,7 @@ extends Node2D
 const SpriteFactoryScr = preload("res://src/gameplay/sprite_factory.gd")
 const AnimatedActorScr = preload("res://src/gameplay/animated_actor.gd")
 const UiThemeScr = preload("res://src/ui/ui_theme.gd")
+const UxCopyScr = preload("res://src/sim/ux_copy.gd")
 
 const LAYER_WORLD := 1
 const WORLD_BOUNDS := Rect2(28, 36, 584, 328)
@@ -376,13 +377,11 @@ func _buy_item(item_id: String) -> void:
 		if audio and audio.has_method("play"):
 			audio.play("ui_click")
 	else:
-		var reason := str(r.get("reason", "fail"))
-		if reason == "NOT_ENOUGH_POINTS":
-			_toast.text = "Need more care points (earn by caring at home / park)"
-		elif reason == "ALREADY_OWNED":
+		var reason := str(r.get("reason", ""))
+		if reason == "ALREADY_OWNED":
 			_toast.text = "You already own a chew toy"
 		else:
-			_toast.text = "Can't buy: %s" % reason
+			_toast.text = UxCopyScr.care_fail_message(reason)
 	_refresh_shop_labels()
 
 
@@ -402,7 +401,7 @@ func _confirm_adopt() -> void:
 			audio.play("adopt")
 		SceneRouter.go("habitat", "from_town")
 	else:
-		_toast.text = "Adopt failed: %s" % str(r.get("reason", "error"))
+		_toast.text = UxCopyScr.care_fail_message(str(r.get("reason", "")))
 		var audio2 := get_node_or_null("/root/AudioService")
 		if audio2 and audio2.has_method("play"):
 			audio2.play("care_fail")

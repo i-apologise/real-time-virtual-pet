@@ -5,6 +5,7 @@ const SpriteFactoryScr = preload("res://src/gameplay/sprite_factory.gd")
 const AnimatedActorScr = preload("res://src/gameplay/animated_actor.gd")
 const AmbientWalkerScr = preload("res://src/gameplay/ambient_walker.gd")
 const UiThemeScr = preload("res://src/ui/ui_theme.gd")
+const UxCopyScr = preload("res://src/sim/ux_copy.gd")
 
 const LAYER_WORLD := 1
 const WORLD_BOUNDS := Rect2(28, 28, 584, 344)
@@ -256,9 +257,15 @@ func _try_park_play() -> void:
 	var r: Dictionary = PetController.request_care(&"play", {"outdoor_park": true})
 	if r.get("ok", false):
 		var pts := int(r.get("care_points_earned", 0))
-		_toast.text = "Fetch! Happy park play · +%d care points" % pts
+		# P4: first park bonus tip once, else normal success line
+		if bool(r.get("first_park_bonus_toast", false)):
+			_toast.text = UxCopyScr.first_park_bonus_tip()
+		elif bool(r.get("first_care_points_toast", false)):
+			_toast.text = UxCopyScr.first_care_points_tip()
+		else:
+			_toast.text = "Fetch! Happy park play · +%d care points" % pts
 		var audio := get_node_or_null("/root/AudioService")
 		if audio and audio.has_method("play_care"):
 			audio.play_care(&"play", true)
 	else:
-		_toast.text = "Can't play: %s" % str(r.get("reason", "no"))
+		_toast.text = UxCopyScr.care_fail_message(str(r.get("reason", "")), "play")

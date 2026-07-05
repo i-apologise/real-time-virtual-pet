@@ -7,6 +7,7 @@ const CareDirectorScr = preload("res://src/gameplay/care_director.gd")
 const MoodStateMachineScr = preload("res://src/sim/mood_state_machine.gd")
 const NeedsForecastScr = preload("res://src/sim/needs_forecast.gd")
 const CareAdvisorScr = preload("res://src/sim/care_advisor.gd")
+const UxCopyScr = preload("res://src/sim/ux_copy.gd")
 const UiThemeScr = preload("res://src/ui/ui_theme.gd")
 
 const NEAR_PET_DIST := 56.0
@@ -483,6 +484,7 @@ func _wire_director() -> void:
 		if ok:
 			_spawn_care_juice(String(a))
 			_show_care_success_emote(String(a))
+			# First-time ❤ / park tips are emitted via care_director.toast (P4)
 		else:
 			_show_emote("…", Color(0.65, 0.62, 0.7))
 	)
@@ -1528,7 +1530,7 @@ func _on_care(action: StringName) -> void:
 	if not r.get("ok", false):
 		var msg := str(r.get("message", ""))
 		if msg == "":
-			msg = str(r.get("reason", "Couldn't do that"))
+			msg = UxCopyScr.care_fail_message(str(r.get("reason", "")), String(action))
 		_show_toast(msg)
 		if _human and not _director.is_busy():
 			_human.set_busy(false)

@@ -4,6 +4,7 @@ extends Node2D
 const SpriteFactoryScr = preload("res://src/gameplay/sprite_factory.gd")
 const AnimatedActorScr = preload("res://src/gameplay/animated_actor.gd")
 const UiThemeScr = preload("res://src/ui/ui_theme.gd")
+const UxCopyScr = preload("res://src/sim/ux_copy.gd")
 
 const LAYER_WORLD := 1
 const DIG_HOLD_SEC := 2.5
@@ -358,7 +359,7 @@ func _finish_dig() -> void:
 		lab.add_theme_color_override("font_color", Color.WHITE)
 		_world.add_child(lab)
 	else:
-		_toast.text = "Could not bury: %s" % str(r.get("reason", "fail"))
+		_toast.text = UxCopyScr.care_fail_message(str(r.get("reason", "")))
 		_dig_bar.value = 0.0
 		if has_node("/root/AudioService"):
 			get_node("/root/AudioService").play("care_fail")

@@ -1,6 +1,6 @@
 # Needs your review
 
-- **PR #24** — home feel + park bonuses + care-points shop
-  https://github.com/i-apologise/real-time-virtual-pet/pull/24
+- **PR #26** — UI P0: shared theme kit + home HUD hierarchy
+  https://github.com/i-apologise/real-time-virtual-pet/pull/26
 
-Option A (reactive home) + mix of B (park payoffs, store supplies).
+After merge, agent chain continues **P1 → P2 → P3 → P4** (each its own PR).

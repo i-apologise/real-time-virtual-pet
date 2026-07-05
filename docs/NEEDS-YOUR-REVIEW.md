@@ -1,8 +1,8 @@
 # Needs your review
 
-- **PR #28** — UI P2: input & discoverability (CARE click, settings, verbs)
-  https://github.com/i-apologise/real-time-virtual-pet/pull/28
+- **PR #29** — UI P3: cross-scene chrome (town/park/store/yard)
+  https://github.com/i-apologise/real-time-virtual-pet/pull/29
 
-After merge, agent chain continues **P3 → P4** (each its own PR).
+After merge, agent chain continues **P4** (final polish PR).
 
-Prior: P0 **#26** MERGED · P1 **#27** MERGED.
+Prior: P0 **#26** · P1 **#27** · P2 **#28** MERGED.

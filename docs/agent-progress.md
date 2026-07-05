@@ -33,3 +33,6 @@
 
 | 2026-07-05 | P1 #27 MERGED; opened **PR #28** UI P2 input/settings. Tests 15/15 PASS. |
 | 2026-07-05 | NEEDS REVIEW: PR #28 — https://github.com/i-apologise/real-time-virtual-pet/pull/28 |
+
+| 2026-07-05 | P2 #28 MERGED; opened **PR #29** UI P3 cross-scene chrome. Tests 15/15 PASS. |
+| 2026-07-05 | NEEDS REVIEW: PR #29 — https://github.com/i-apologise/real-time-virtual-pet/pull/29 |

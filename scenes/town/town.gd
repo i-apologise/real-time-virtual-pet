@@ -4,6 +4,7 @@ extends Node2D
 const SpriteFactoryScr = preload("res://src/gameplay/sprite_factory.gd")
 const AnimatedActorScr = preload("res://src/gameplay/animated_actor.gd")
 const AmbientWalkerScr = preload("res://src/gameplay/ambient_walker.gd")
+const UiThemeScr = preload("res://src/ui/ui_theme.gd")
 
 const POI_RADIUS := 42.0
 const LAYER_WORLD := 1
@@ -168,16 +169,15 @@ func _build_world() -> void:
 
 	var layer := CanvasLayer.new()
 	add_child(layer)
-	_label = Label.new()
-	_label.position = Vector2(8, 6)
-	_label.add_theme_font_size_override("font_size", 12)
-	_label.add_theme_color_override("font_color", Color.WHITE)
-	_label.text = "Town — WASD · E Enter building"
-	layer.add_child(_label)
-	_toast = Label.new()
-	_toast.position = Vector2(8, 28)
-	_toast.add_theme_font_size_override("font_size", 12)
-	_toast.modulate = Color(1, 1, 0.65)
+	# P3: shared product chrome (top context chip + toast)
+	var top := PanelContainer.new()
+	UiThemeScr.apply_panel(top, true)
+	top.position = Vector2(10, 8)
+	layer.add_child(top)
+	_label = UiThemeScr.title_label("Town — WASD · E Enter building", 12)
+	top.add_child(_label)
+	_toast = UiThemeScr.toast_label("")
+	_toast.position = Vector2(10, 48)
 	layer.add_child(_toast)
 
 

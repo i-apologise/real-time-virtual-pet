@@ -3,6 +3,7 @@ extends Node2D
 
 const SpriteFactoryScr = preload("res://src/gameplay/sprite_factory.gd")
 const AnimatedActorScr = preload("res://src/gameplay/animated_actor.gd")
+const UiThemeScr = preload("res://src/ui/ui_theme.gd")
 
 const LAYER_WORLD := 1
 const DIG_HOLD_SEC := 2.5
@@ -183,36 +184,40 @@ func _build() -> void:
 
 	var layer := CanvasLayer.new()
 	add_child(layer)
-	_label = Label.new()
-	_label.position = Vector2(8, 8)
-	_label.add_theme_font_size_override("font_size", 13)
-	_label.add_theme_color_override("font_color", Color.WHITE)
-	_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
-	_label.add_theme_constant_override("outline_size", 3)
-	layer.add_child(_label)
-	_toast = Label.new()
-	_toast.position = Vector2(8, 32)
-	_toast.modulate = Color(1, 1, 0.7)
+	var top := PanelContainer.new()
+	UiThemeScr.apply_panel(top, true)
+	top.position = Vector2(10, 8)
+	layer.add_child(top)
+	_label = UiThemeScr.title_label("Backyard", 12)
+	top.add_child(_label)
+	_toast = UiThemeScr.toast_label("")
+	_toast.position = Vector2(10, 48)
 	layer.add_child(_toast)
 
-	var back := Button.new()
-	back.text = "Enter house"
-	back.position = Vector2(8, 56)
+	var back := UiThemeScr.themed_button("Enter house")
+	back.position = Vector2(10, 72)
 	back.pressed.connect(_go_house)
 	layer.add_child(back)
 
+	# P3: dig ritual uses shared modal chrome + themed progress bar
 	_dig_panel = PanelContainer.new()
 	_dig_panel.position = Vector2(200, 320)
 	_dig_panel.visible = false
+	UiThemeScr.apply_panel(_dig_panel, true)
 	layer.add_child(_dig_panel)
 	var dv := VBoxContainer.new()
+	dv.add_theme_constant_override("separation", 8)
 	_dig_panel.add_child(dv)
-	var dl := Label.new()
-	dl.text = "Hold E or Space to dig the grave"
+	var dl := UiThemeScr.title_label("Hold E or Space to dig the grave", 13)
 	dv.add_child(dl)
+	var dh := UiThemeScr.body_label("Stay near the empty plot until the bar fills.", 11)
+	dh.custom_minimum_size = Vector2(240, 0)
+	dv.add_child(dh)
 	_dig_bar = ProgressBar.new()
-	_dig_bar.custom_minimum_size = Vector2(200, 16)
+	_dig_bar.custom_minimum_size = Vector2(220, 18)
 	_dig_bar.max_value = 100
+	_dig_bar.show_percentage = false
+	UiThemeScr.style_progress_bar(_dig_bar, UiThemeScr.BAR_FILL_MID)
 	dv.add_child(_dig_bar)
 
 

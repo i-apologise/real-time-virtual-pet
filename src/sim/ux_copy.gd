@@ -23,11 +23,40 @@ static func care_fail_message(reason: String, action: String = "") -> String:
 		"ENERGY_TOO_LOW":
 			return "Too tired — let them sleep first"
 		"UNKNOWN_ACTION":
-			return "Unknown action"
+			return "That action isn't available"
+		"NOT_ENOUGH_POINTS":
+			return "Need more care points (earn by caring at home / park)"
+		"ALREADY_OWNED":
+			return "You already own that item"
+		"UNKNOWN_ITEM":
+			return "That item isn't for sale"
+		"HAS_ACTIVE_PET":
+			return "You already have a living pet"
+		"MUST_BURY_FIRST":
+			return "Bury your pet in the backyard first"
+		"INVALID_NAME":
+			return "Name needs 2–16 letters"
+		"INVALID_SPECIES":
+			return "Pick a pen first"
+		"INVALID_ARGS":
+			return "Couldn't complete that"
+		"PET_NOT_DEAD":
+			return "Nothing to bury right now"
+		"ALREADY_BURIED":
+			return "Already laid to rest"
 		_:
 			if reason == "":
 				return "Couldn't do that"
-			return "%s failed — %s" % [a, reason.replace("_", " ").to_lower()]
+			# Never surface raw SCREAMING_SNAKE enums to players
+			return "Couldn't do that right now"
+
+
+static func first_care_points_tip() -> String:
+	return "Earned care points (❤) — spend them at the Pet Store"
+
+
+static func first_park_bonus_tip() -> String:
+	return "Outdoor bonus active — park play earns extra happiness & ❤"
 
 
 static func care_start_blocked(pet: PetModel, action: StringName) -> Dictionary:

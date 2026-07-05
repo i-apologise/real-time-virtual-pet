@@ -2,6 +2,8 @@ extends Node
 ## Care flows: feed at bowl, clean in bathroom, leashed walk, sleep at pet bed.
 ## Always emits timer_tick so UI can show a countdown. Actions never loop forever.
 
+const UxCopyScr = preload("res://src/sim/ux_copy.gd")
+
 signal choreography_started(action: StringName)
 signal choreography_finished(action: StringName, result: Dictionary)
 signal toast(message: String)
@@ -354,25 +356,18 @@ func _complete_care() -> void:
 	var result: Dictionary = PetController.request_care(action)
 	_sync_pet_mood()
 	if result.get("ok", false):
-		toast.emit(_success_toast(action, result))
+		# Prefer one-shot discovery tips over generic success on first earn / park bonus
+		if bool(result.get("first_care_points_toast", false)):
+			toast.emit(UxCopyScr.first_care_points_tip())
+		elif bool(result.get("first_park_bonus_toast", false)):
+			toast.emit(UxCopyScr.first_park_bonus_tip())
+		else:
+			toast.emit(_success_toast(action, result))
 	else:
 		var reason := str(result.get("reason", ""))
 		var msg := str(result.get("message", ""))
 		if msg == "":
-			# Friendly fallbacks for sim-layer reasons
-			match reason:
-				"PET_SLEEPING":
-					msg = "Zzz… wake them first (CARE → WAKE)"
-				"COOLDOWN":
-					msg = "%s needs a short rest" % str(action).capitalize()
-				"ENERGY_TOO_LOW":
-					msg = "Too tired — let them sleep first"
-				"ALREADY_SLEEPING":
-					msg = "Already asleep — Zzz…"
-				"NOT_SLEEPING":
-					msg = "They're already awake"
-				_:
-					msg = "%s failed — %s" % [str(action).capitalize(), reason.replace("_", " ").to_lower()]
+			msg = UxCopyScr.care_fail_message(reason, String(action))
 		toast.emit(msg)
 	choreography_finished.emit(action, result)
 

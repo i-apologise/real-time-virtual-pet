@@ -76,9 +76,13 @@ Onboarding flag: `user://onboarding.cfg` (`tutorial_done`).
 |-------|--------|
 | **E** | Open CARE (must be close to pet) |
 | **↑ / ↓** or **W / S** (while menu open) | Move cursor (skips greyed-out actions) |
+| **Click row** | Select and confirm (mouse) |
 | **Z**, **Enter**, **Space**, or **E** | Confirm selection |
 | **X** or **Esc** | Cancel / close menu |
 | **1–6** | Jump to care row and confirm |
+| **Esc** (menu closed) | Settings (mute SFX + ambient) |
+
+Successful care earns **❤ care points** (first earn shows a one-time tip). Spend them at the Pet Store. Park play while leashed grants an **outdoor bonus** (also tipped once).
 
 ### Debug / playtest (habitat)
 

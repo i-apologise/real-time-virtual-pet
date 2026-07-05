@@ -27,15 +27,17 @@ Living list of player-facing papercuts. When changing care/HUD/nav, scan this li
 - [x] Cooldown remaining on CARE rows (shipped ~PR #22).
 - [ ] Auto-wake option on FEED (optional — currently must wake first).
 - [x] Grey CARE rows when energy too low for walk/play (blocked reasons).
-- [ ] CARE menu mouse click.  ← UI-3
+- [x] CARE menu mouse click.  ← UI-3 / P2
 - [x] SFX + particles on care success (~PR #23).
-- [ ] Toast auto-clear after 3s.  ← UI-2
-- [ ] First-time tooltips collapse after N sessions.  ← UI-6
+- [x] Toast auto-clear after 3s.  ← UI-2 / P1
+- [x] First-time care points + park bonus tips (once).  ← UI-6 / P4
 - [x] “Suggested care” tip (~PR #22).
-- [ ] Day/night phase chip on HUD.  ← UI-2
+- [x] Day/night phase chip on HUD.  ← UI-2 / P1
 - [ ] Pet age / days owned.
-- [ ] Shared UI kit across scenes.  ← UI-1 / UI-4
-- [ ] Cross-scene chrome consistency.  ← UI-4
+- [x] Shared UI kit across scenes.  ← UI-1 / UI-4 / P0–P3
+- [x] Cross-scene chrome consistency.  ← UI-4 / P3
+- [x] Settings mute (SFX + ambient).  ← P2
+- [x] No raw enum toasts on store/park/graveyard fail paths.  ← P4
 
 ### Why feed looked broken
 

@@ -492,7 +492,7 @@ func _wire_director() -> void:
 	if PetController.escort_active and _pet and str(PetController.active_pet.life_state if PetController.active_pet else "") != "DEAD":
 		_pet.visible = true
 		_director.resume_escort_visuals()
-		_show_toast("Still on leash — E near pet when ready to end walk")
+		_show_toast("Still on leash — town door works; E near pet (off mats) to end walk")
 
 
 func _style_panel_light() -> StyleBoxFlat:
@@ -1152,28 +1152,36 @@ func _process(delta: float) -> void:
 		# Live-refresh cooldowns while menu open
 		if int(_zzz_t * 2.0) % 2 == 0:
 			_refresh_care_cursor()
-	# Door proximity — short verbs (P0)
+	# Door proximity — short verbs (P0). Doors beat end-walk: pet follow is always "near".
 	if _human and not _care_menu_open and not (_director and _director.is_busy()):
 		if _at_door(DOOR_TOWN):
-			_hint.text = "E Enter town"
+			if PetController.escort_active:
+				_hint.text = "E Enter town (pet comes with you)"
+			else:
+				_hint.text = "E Enter town"
 		elif _at_door(DOOR_YARD):
-			_hint.text = "E Enter backyard"
+			if PetController.escort_active:
+				_hint.text = "Finish walk first (E near pet) — backyard is for home only"
+			else:
+				_hint.text = "E Enter backyard"
 	if Input.is_action_just_pressed("interact"):
 		if _care_menu_open:
 			_confirm_care_selection()
 			return
-		# End outdoor leash walk near pet
-		if PetController.escort_active and _near_pet and _director:
-			_director.try_finish_escort()
-			return
+		# Navigation first while leashed — ending walk used to steal E at the door
+		# because the following pet is always within NEAR_PET_DIST.
 		if _at_door(DOOR_TOWN):
 			SceneRouter.go("town", "from_house")
 			return
 		if _at_door(DOOR_YARD):
 			if PetController.escort_active:
-				_show_toast("Finish the walk first (E near pet) — or take them to Town")
+				_show_toast("On a walk — use the town door (left), or E near pet (away from doors) to end")
 				return
 			SceneRouter.go("graveyard", "from_house")
+			return
+		# End outdoor leash only when not on a door mat
+		if PetController.escort_active and _near_pet and _director:
+			_director.try_finish_escort()
 			return
 		if _near_pet and PetController.active_pet != null and str(PetController.active_pet.life_state) != "DEAD":
 			_open_care_menu()
@@ -1274,6 +1282,13 @@ func _update_near_pet_ui() -> void:
 
 	# Don't overwrite door hints while standing on a door
 	if _at_door(DOOR_TOWN) or _at_door(DOOR_YARD):
+		return
+	if PetController.escort_active and life != "DEAD" and life != "":
+		var left := maxf(0.0, PetController.ESCORT_MIN_SEC - PetController.escort_elapsed_sec)
+		if left > 0.0:
+			_hint.text = "On leash · walk min %.0fs · doors work · then E end walk" % left
+		else:
+			_hint.text = "On leash — E End walk (step off door mats) · or keep exploring"
 		return
 	if _near_pet and life != "DEAD" and life != "":
 		if PetController.active_pet.is_sleeping():

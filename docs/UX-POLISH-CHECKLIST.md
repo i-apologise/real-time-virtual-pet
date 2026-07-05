@@ -22,17 +22,20 @@ Living list of player-facing papercuts. When changing care/HUD/nav, scan this li
 
 ## Still open / nice-to-have (ideas)
 
-- [ ] Cooldown remaining on CARE rows (“FEED · ready in 4m”).
+> **Prioritized UX/UI plan:** see [`UX-UI-POLISH-PLAN.md`](UX-UI-POLISH-PLAN.md). Several items below are **done** (cooldowns on rows, suggest, juice) — kept for history; don’t re-implement.
+
+- [x] Cooldown remaining on CARE rows (shipped ~PR #22).
 - [ ] Auto-wake option on FEED (optional — currently must wake first).
-- [ ] Grey CARE rows when energy too low for walk/play.
-- [ ] CARE menu mouse click.
-- [ ] SFX + particles on care success.
-- [ ] Toast auto-clear after 3s.
-- [ ] First-time tooltips collapse after N sessions.
-- [ ] “Suggested care” tip (e.g. “Hunger low — FEED”).
-- [ ] Day/night phase chip on HUD.
+- [x] Grey CARE rows when energy too low for walk/play (blocked reasons).
+- [ ] CARE menu mouse click.  ← UI-3
+- [x] SFX + particles on care success (~PR #23).
+- [ ] Toast auto-clear after 3s.  ← UI-2
+- [ ] First-time tooltips collapse after N sessions.  ← UI-6
+- [x] “Suggested care” tip (~PR #22).
+- [ ] Day/night phase chip on HUD.  ← UI-2
 - [ ] Pet age / days owned.
-- [ ] Leash thickness / town art / SFX (presentation).
+- [ ] Shared UI kit across scenes.  ← UI-1 / UI-4
+- [ ] Cross-scene chrome consistency.  ← UI-4
 
 ### Why feed looked broken
 

@@ -461,24 +461,24 @@ func _process(_delta: float) -> void:
 		return
 
 	if EXIT_DOOR.has_point(_human.position):
-		_label.text = "Exit — press E to return to Town"
+		_label.text = "E Leave store → Town"
 		if Input.is_action_just_pressed("interact"):
 			SceneRouter.go("town", "from_store")
 		return
 
 	if not _near_pen.is_empty():
-		_label.text = "Near %s — press E to learn more / adopt" % _near_pen["display"]
+		_label.text = "E View %s" % _near_pen["display"]
 		if Input.is_action_just_pressed("interact"):
 			_open_pen_info(_near_pen)
 		return
 
 	if _near_reception:
-		_label.text = "Reception (Sam) — press E to adopt selected species"
+		_label.text = "E Open reception (adopt)"
 		if Input.is_action_just_pressed("interact"):
 			_open_reception()
 		return
 
-	_label.text = "Paw & Co. — pens left/center/right · Reception north · Exit south"
+	_label.text = "Store — E View pen · E Open reception · E Leave (south)"
 
 	if Input.is_action_just_pressed("ui_cancel") and _adopt_panel.visible:
 		_adopt_panel.visible = false

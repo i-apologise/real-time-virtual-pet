@@ -7,6 +7,7 @@ const CareDirectorScr = preload("res://src/gameplay/care_director.gd")
 const MoodStateMachineScr = preload("res://src/sim/mood_state_machine.gd")
 const NeedsForecastScr = preload("res://src/sim/needs_forecast.gd")
 const CareAdvisorScr = preload("res://src/sim/care_advisor.gd")
+const UiThemeScr = preload("res://src/ui/ui_theme.gd")
 
 const NEAR_PET_DIST := 56.0
 const LAYER_WORLD := 1
@@ -485,38 +486,11 @@ func _wire_director() -> void:
 
 
 func _style_panel_light() -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.99, 0.97, 0.90)
-	sb.border_color = Color(0.12, 0.10, 0.08)
-	sb.set_border_width_all(3)
-	sb.set_corner_radius_all(6)
-	sb.content_margin_left = 12
-	sb.content_margin_right = 12
-	sb.content_margin_top = 10
-	sb.content_margin_bottom = 10
-	sb.shadow_color = Color(0, 0, 0, 0.35)
-	sb.shadow_size = 6
-	return sb
+	return UiThemeScr.panel_style(true)
 
 
 func _style_row(selected: bool, disabled: bool) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	if selected:
-		sb.bg_color = Color(0.85, 0.18, 0.14)
-		sb.border_color = Color(0.45, 0.05, 0.05)
-	elif disabled:
-		sb.bg_color = Color(0.88, 0.86, 0.82)
-		sb.border_color = Color(0.75, 0.72, 0.68)
-	else:
-		sb.bg_color = Color(0.96, 0.94, 0.88)
-		sb.border_color = Color(0.75, 0.72, 0.65)
-	sb.set_border_width_all(2 if selected else 1)
-	sb.set_corner_radius_all(3)
-	sb.content_margin_left = 8
-	sb.content_margin_right = 8
-	sb.content_margin_top = 4
-	sb.content_margin_bottom = 4
-	return sb
+	return UiThemeScr.row_style(selected, disabled)
 
 
 func _build_hud() -> void:
@@ -525,56 +499,44 @@ func _build_hud() -> void:
 	_hud_layer = layer
 	add_child(layer)
 
-	# --- Top-left: counter + hints ---
-	var top := HBoxContainer.new()
-	top.position = Vector2(8, 6)
-	layer.add_child(top)
-	_counter = Label.new()
-	_counter.add_theme_font_size_override("font_size", 12)
-	_counter.add_theme_color_override("font_color", Color(1, 1, 1))
-	_counter.text = "Deaths 0 · Graves 0"
-	top.add_child(_counter)
+	# --- P0 hierarchy: slim top status bar (identity + counters) ---
+	var top_bar := PanelContainer.new()
+	top_bar.name = "TopStatusBar"
+	UiThemeScr.apply_panel(top_bar, true)
+	top_bar.position = Vector2(12, 8)
+	layer.add_child(top_bar)
+	var top_v := VBoxContainer.new()
+	top_v.add_theme_constant_override("separation", 2)
+	top_bar.add_child(top_v)
+	_counter = UiThemeScr.title_label("Deaths 0 · Graves 0 · ❤0", 12)
+	top_v.add_child(_counter)
 
-	_hint = Label.new()
-	_hint.position = Vector2(8, 26)
-	_hint.add_theme_font_size_override("font_size", 12)
-	_hint.add_theme_color_override("font_color", Color(0.95, 0.95, 0.85))
-	_hint.text = "WASD move · near pet · E care menu · ↑↓ select · Z/Enter confirm"
+	# Context verb line (bottom) — short, not a control essay
+	_hint = UiThemeScr.world_hint_label("Near pet — E Open CARE", 13)
+	_hint.position = Vector2(16, 680)
 	layer.add_child(_hint)
 
-	_toast = Label.new()
-	_toast.position = Vector2(8, 46)
-	_toast.add_theme_font_size_override("font_size", 13)
-	_toast.add_theme_color_override("font_color", Color(1.0, 0.95, 0.45))
+	# Toast — bottom-center placement (TTL added in P1)
+	_toast = UiThemeScr.toast_label("")
+	_toast.position = Vector2(400, 640)
 	layer.add_child(_toast)
 
-	# --- Top-right: needs bars + numbers + ETAs (never over the pet) ---
+	# --- Top-right: needs card (shared chrome) ---
 	_stats_panel = PanelContainer.new()
 	_stats_panel.visible = false
-	_stats_panel.add_theme_stylebox_override("panel", _style_panel_light())
+	UiThemeScr.apply_panel(_stats_panel, true)
 	_stats_panel.position = Vector2(1000, 8)
 	layer.add_child(_stats_panel)
 	var stats_v := VBoxContainer.new()
 	stats_v.add_theme_constant_override("separation", 6)
 	_stats_panel.add_child(stats_v)
-	_stat_title = Label.new()
-	_stat_title.text = "Pet"
-	_stat_title.add_theme_font_size_override("font_size", 14)
-	_stat_title.add_theme_color_override("font_color", Color(0.12, 0.10, 0.08))
+	_stat_title = UiThemeScr.title_label("Pet", 14)
 	stats_v.add_child(_stat_title)
-	_stat_forecast = Label.new()
-	_stat_forecast.text = ""
-	_stat_forecast.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_stat_forecast = UiThemeScr.body_label("", 11)
 	_stat_forecast.custom_minimum_size = Vector2(220, 0)
-	_stat_forecast.add_theme_font_size_override("font_size", 11)
-	_stat_forecast.add_theme_color_override("font_color", Color(0.25, 0.22, 0.18))
 	stats_v.add_child(_stat_forecast)
-	_stat_suggest = Label.new()
-	_stat_suggest.text = "Suggested: —"
-	_stat_suggest.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_stat_suggest = UiThemeScr.accent_label("Suggested: —", 12)
 	_stat_suggest.custom_minimum_size = Vector2(220, 0)
-	_stat_suggest.add_theme_font_size_override("font_size", 12)
-	_stat_suggest.add_theme_color_override("font_color", Color(0.55, 0.15, 0.12))
 	stats_v.add_child(_stat_suggest)
 	_stat_bars.clear()
 	_stat_value_labs.clear()
@@ -591,53 +553,41 @@ func _build_hud() -> void:
 		stats_v.add_child(block)
 		var row := HBoxContainer.new()
 		block.add_child(row)
-		var lab := Label.new()
-		lab.text = stat.substr(0, 3).to_upper()
+		var lab := UiThemeScr.body_label(stat.substr(0, 3).to_upper(), 12)
 		lab.custom_minimum_size = Vector2(36, 0)
-		lab.add_theme_font_size_override("font_size", 12)
-		lab.add_theme_color_override("font_color", Color(0.15, 0.12, 0.10))
+		lab.add_theme_color_override("font_color", UiThemeScr.TEXT_DARK)
 		row.add_child(lab)
 		var bar := ProgressBar.new()
 		bar.custom_minimum_size = Vector2(110, 16)
 		bar.max_value = 100.0
 		bar.show_percentage = false
+		UiThemeScr.style_progress_bar(bar, UiThemeScr.BAR_FILL_OK)
 		row.add_child(bar)
 		_stat_bars[stat] = bar
-		var val := Label.new()
-		val.text = "80"
+		var val := UiThemeScr.title_label("80", 13)
 		val.custom_minimum_size = Vector2(36, 0)
 		val.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		val.add_theme_font_size_override("font_size", 13)
-		val.add_theme_color_override("font_color", Color(0.10, 0.10, 0.12))
 		row.add_child(val)
 		_stat_value_labs[stat] = val
-		var eta := Label.new()
-		eta.text = "  %s in —" % eta_hints[stat]
-		eta.add_theme_font_size_override("font_size", 10)
-		eta.add_theme_color_override("font_color", Color(0.35, 0.32, 0.28))
+		var eta := UiThemeScr.body_label("  %s in —" % eta_hints[stat], 10)
 		block.add_child(eta)
 		_stat_eta_labs[stat] = eta
 
 	call_deferred("_place_stats_panel")
+	call_deferred("_place_home_hud")
 
-	# --- High-contrast CARE menu (bottom-left) ---
+	# --- CARE menu (bottom-left, product style) ---
 	_care_panel = PanelContainer.new()
 	_care_panel.visible = false
-	_care_panel.add_theme_stylebox_override("panel", _style_panel_light())
+	UiThemeScr.apply_panel(_care_panel, true)
 	_care_panel.position = Vector2(16, 400)
 	layer.add_child(_care_panel)
 	var care_outer := VBoxContainer.new()
 	care_outer.add_theme_constant_override("separation", 4)
 	_care_panel.add_child(care_outer)
-	var care_title := Label.new()
-	care_title.text = "CARE"
-	care_title.add_theme_font_size_override("font_size", 18)
-	care_title.add_theme_color_override("font_color", Color(0.10, 0.08, 0.06))
+	var care_title := UiThemeScr.title_label("CARE", 18)
 	care_outer.add_child(care_title)
-	var help := Label.new()
-	help.text = "↑↓ move · Z/Enter · X cancel"
-	help.add_theme_font_size_override("font_size", 11)
-	help.add_theme_color_override("font_color", Color(0.25, 0.22, 0.18))
+	var help := UiThemeScr.body_label("↑↓ move · Z/Enter · X cancel", 11)
 	care_outer.add_child(help)
 	_care_list = VBoxContainer.new()
 	_care_list.add_theme_constant_override("separation", 3)
@@ -683,23 +633,19 @@ func _build_hud() -> void:
 	_emote.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_world.add_child(_emote)
 
-	# Nav shortcuts (doors still preferred)
+	# Compact nav (secondary — doors preferred)
 	var nav := HBoxContainer.new()
-	nav.position = Vector2(8, 68)
+	nav.name = "NavShortcuts"
+	nav.position = Vector2(12, 56)
+	nav.add_theme_constant_override("separation", 6)
 	layer.add_child(nav)
-	var b_town := Button.new()
-	b_town.text = "Town door"
-	b_town.add_theme_font_size_override("font_size", 11)
+	var b_town := UiThemeScr.themed_button("Town")
 	b_town.pressed.connect(func(): SceneRouter.go("town", "from_house"))
 	nav.add_child(b_town)
-	var b_yard := Button.new()
-	b_yard.text = "Backyard"
-	b_yard.add_theme_font_size_override("font_size", 11)
+	var b_yard := UiThemeScr.themed_button("Yard")
 	b_yard.pressed.connect(func(): SceneRouter.go("graveyard", "from_house"))
 	nav.add_child(b_yard)
-	var b_store := Button.new()
-	b_store.text = "Store"
-	b_store.add_theme_font_size_override("font_size", 11)
+	var b_store := UiThemeScr.themed_button("Store")
 	b_store.pressed.connect(func(): SceneRouter.go("pet_store", "from_town"))
 	nav.add_child(b_store)
 
@@ -736,7 +682,7 @@ func _build_hud() -> void:
 	# --- Care timer (center-top) ---
 	_care_timer_panel = PanelContainer.new()
 	_care_timer_panel.visible = false
-	_care_timer_panel.add_theme_stylebox_override("panel", _style_panel_light())
+	UiThemeScr.apply_panel(_care_timer_panel, true)
 	_care_timer_panel.position = Vector2(520, 8)
 	layer.add_child(_care_timer_panel)
 	var timer_v := VBoxContainer.new()
@@ -759,7 +705,7 @@ func _build_hud() -> void:
 	# Session check-in banner (shown once after boot/resume with gap)
 	_session_panel = PanelContainer.new()
 	_session_panel.visible = false
-	_session_panel.add_theme_stylebox_override("panel", _style_panel_light())
+	UiThemeScr.apply_panel(_session_panel, true)
 	layer.add_child(_session_panel)
 	var sv := VBoxContainer.new()
 	sv.add_theme_constant_override("separation", 6)
@@ -835,11 +781,21 @@ func _hide_care_timer() -> void:
 		_care_timer_panel.visible = false
 
 
+func _place_home_hud() -> void:
+	## P0: viewport-relative layout for context + toast.
+	var vp := get_viewport().get_visible_rect().size
+	if _hint:
+		_hint.position = Vector2(16.0, maxf(40.0, vp.y - 36.0))
+	if _toast:
+		_toast.position = Vector2(vp.x * 0.5 - 160.0, maxf(40.0, vp.y - 72.0))
+		_toast.custom_minimum_size = Vector2(320, 0)
+
+
 func _place_care_timer() -> void:
 	if _care_timer_panel == null:
 		return
 	var vp := get_viewport().get_visible_rect().size
-	_care_timer_panel.position = Vector2(vp.x * 0.5 - 90.0, 8.0)
+	_care_timer_panel.position = Vector2(vp.x * 0.5 - 90.0, 56.0)
 
 
 func _place_stats_panel() -> void:
@@ -847,17 +803,17 @@ func _place_stats_panel() -> void:
 	if _stats_panel == null:
 		return
 	var vp := get_viewport().get_visible_rect().size
-	_stats_panel.position = Vector2(vp.x - 260, 8)
+	_stats_panel.position = Vector2(vp.x - 268, 8)
 
 
 func _panel(text: String) -> PanelContainer:
 	var p := PanelContainer.new()
+	UiThemeScr.apply_panel(p, true)
 	var v := VBoxContainer.new()
 	p.add_child(v)
-	var l := Label.new()
-	l.text = text
-	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var l := UiThemeScr.body_label(text, 12)
 	l.custom_minimum_size = Vector2(200, 0)
+	l.add_theme_color_override("font_color", UiThemeScr.TEXT_DARK)
 	v.add_child(l)
 	return p
 
@@ -1132,17 +1088,18 @@ func _process(delta: float) -> void:
 	_update_emote(delta)
 	_update_care_juice(delta)
 	_place_stats_panel()
+	_place_home_hud()
 	if _care_menu_open:
 		_place_care_menu()
 		# Live-refresh cooldowns while menu open
 		if int(_zzz_t * 2.0) % 2 == 0:
 			_refresh_care_cursor()
-	# Door proximity hints (backyard is attached to home)
+	# Door proximity — short verbs (P0)
 	if _human and not _care_menu_open and not (_director and _director.is_busy()):
 		if _at_door(DOOR_TOWN):
-			_hint.text = "Town door — press E to leave home"
+			_hint.text = "E Enter town"
 		elif _at_door(DOOR_YARD):
-			_hint.text = "Backyard door — press E (graveyard is behind the house)"
+			_hint.text = "E Enter backyard"
 	if Input.is_action_just_pressed("interact"):
 		if _care_menu_open:
 			_confirm_care_selection()
@@ -1262,15 +1219,15 @@ func _update_near_pet_ui() -> void:
 		return
 	if _near_pet and life != "DEAD" and life != "":
 		if PetController.active_pet.is_sleeping():
-			_hint.text = "%s is sleeping (Zzz) — E CARE · WAKE to feed/play" % str(PetController.active_pet.name)
+			_hint.text = "Zzz %s — E Open CARE (WAKE)" % str(PetController.active_pet.name)
 		else:
-			_hint.text = "Near %s — E open CARE · ↑↓ · Z/Enter" % str(PetController.active_pet.name)
+			_hint.text = "Near %s — E Open CARE" % str(PetController.active_pet.name)
 	elif PetController.active_pet == null:
-		_hint.text = "Adopt a pet · WASD · left door=Town · south door=Backyard"
+		_hint.text = "No pet — Store to adopt · E Town / Yard doors"
 	elif life == "DEAD":
-		_hint.text = "Pet passed — south door to backyard · hold E at plot to dig"
+		_hint.text = "Pet passed — E Enter backyard · hold E at plot"
 	else:
-		_hint.text = "Near pet for CARE · left door Town · south door Backyard"
+		_hint.text = "Walk near pet — E Open CARE"
 
 
 func _refresh_need_meters(p) -> void:
@@ -1298,11 +1255,11 @@ func _refresh_need_meters(p) -> void:
 			_stat_bars[k].value = v
 			var flash_left: float = float(_flash_t.get(k, 0.0))
 			if flash_left > 0.0 and v > prev:
-				_stat_bars[k].modulate = Color(0.45, 1.0, 0.55)  # green pop up
+				UiThemeScr.style_progress_bar(_stat_bars[k], Color(0.45, 1.0, 0.55))
 			elif flash_left > 0.0 and v < prev:
-				_stat_bars[k].modulate = Color(1.0, 0.75, 0.4)
+				UiThemeScr.style_progress_bar(_stat_bars[k], Color(1.0, 0.75, 0.4))
 			else:
-				_stat_bars[k].modulate = _bar_color(v)
+				UiThemeScr.style_progress_bar(_stat_bars[k], UiThemeScr.fill_for_need(v))
 		if _stat_value_labs.has(k):
 			(_stat_value_labs[k] as Label).text = "%d" % int(round(v))
 

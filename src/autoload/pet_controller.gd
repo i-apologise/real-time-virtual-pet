@@ -14,12 +14,16 @@ var escort_active: bool = false
 var escort_elapsed_sec: float = 0.0
 var escort_visited_park: bool = false
 const ESCORT_MIN_SEC := 10.0
+## Emotional burial path: carry the body home → backyard (not a teleport).
+var carrying_deceased: bool = false
 ## Set on each focus/boot catch-up for session summary UI.
 var last_session_summary: Dictionary = {}
 var _session_banner_pending: bool = false
 
 
 func start_escort() -> void:
+	if carrying_deceased:
+		return
 	escort_active = true
 	escort_elapsed_sec = 0.0
 	escort_visited_park = false
@@ -50,6 +54,40 @@ func end_escort(apply_walk_care: bool = true) -> Dictionary:
 		result["applied"] = bool(result.get("ok", false))
 		result["outdoor_park"] = park_bonus
 	return result
+
+
+func can_carry_deceased() -> bool:
+	return (
+		active_pet != null
+		and str(active_pet.life_state) == "DEAD"
+		and not active_pet.buried
+		and not carrying_deceased
+		and not escort_active
+	)
+
+
+func start_carry_deceased() -> Dictionary:
+	## Begin carrying the body — player walks them to the backyard plot.
+	if not can_carry_deceased():
+		if carrying_deceased:
+			return {"ok": true, "reason": &"ALREADY_CARRYING"}
+		return {"ok": false, "reason": &"CANNOT_CARRY"}
+	if escort_active:
+		end_escort(false)
+	carrying_deceased = true
+	return {"ok": true}
+
+
+func stop_carry_deceased() -> void:
+	carrying_deceased = false
+
+
+func needs_burial() -> bool:
+	return (
+		active_pet != null
+		and str(active_pet.life_state) == "DEAD"
+		and not active_pet.buried
+	)
 
 
 func _ready() -> void:
@@ -254,6 +292,7 @@ func complete_burial(epitaph: String = "") -> Dictionary:
 		return result
 	var grave: GraveRecord = result["grave"]
 	active_pet = null
+	carrying_deceased = false
 	EventBus.burial_completed.emit(grave.to_dict())
 	EventBus.needs_adoption.emit()
 	_save_atomic()

@@ -67,7 +67,11 @@ static func suggest(pet: PetModel, now: float) -> Dictionary:
 	if pet.life_state == LifeState.DEAD:
 		if pet.buried:
 			return {"action": "", "label": "Laid to rest — adopt again at the Store", "detail": ""}
-		return {"action": "", "label": "Take them to the backyard · hold E to dig", "detail": "DEAD"}
+		return {
+			"action": "",
+			"label": "Carry them (E) · south door · hold E at plot",
+			"detail": "DEAD",
+		}
 	if pet.is_sleeping():
 		if action_blocked_reason("wake", pet, now) == &"":
 			return {"action": "wake", "label": "Suggested: WAKE", "detail": "They're sleeping (Zzz)"}

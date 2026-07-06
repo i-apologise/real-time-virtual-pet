@@ -244,13 +244,18 @@ func _build_room() -> void:
 	# Center rug
 	_add_prop_sprite(SpriteFactoryScr.prop_texture("rug"), Vector2(208, 232), 2.0, -92)
 
-	# Furniture pass: shelf, plant, nightstand, lamp
+	# Furniture pass: shelf, potted plant (planter + foliage — not a free-standing tree), nightstand, lamp
 	_add_decor_rect(Rect2(430, 120, 28, 70), Color("6D4C41"), -88)  # bookcase
 	_add_decor_rect(Rect2(434, 128, 20, 8), Color("E8DCC8"), -87)
 	_add_decor_rect(Rect2(434, 142, 20, 8), Color("C8B8A0"), -87)
 	_add_decor_rect(Rect2(434, 156, 20, 8), Color("E8DCC8"), -87)
-	_add_decor_rect(Rect2(150, 120, 18, 22), Color("2E7D32"), -86)  # plant pot leaves
-	_add_decor_rect(Rect2(154, 140, 10, 12), Color("8D6E63"), -85)
+	# Corner houseplant in a ceramic planter (was a bare green blob that read as a tree)
+	_add_decor_rect(Rect2(148, 138, 22, 14), Color("C47848"), -85)  # terracotta pot
+	_add_decor_rect(Rect2(150, 140, 18, 10), Color("A85A30"), -84)  # pot body
+	_add_decor_rect(Rect2(152, 136, 14, 5), Color("5D4037"), -83)  # soil rim
+	_add_decor_rect(Rect2(149, 122, 8, 16), Color("2E7D32"), -86)  # leaf clump L
+	_add_decor_rect(Rect2(157, 118, 10, 18), Color("388E3C"), -86)  # leaf clump M
+	_add_decor_rect(Rect2(164, 124, 7, 14), Color("43A047"), -86)  # leaf clump R
 	_add_decor_rect(Rect2(100, 100, 22, 18), Color("5D4037"), -88)  # nightstand
 	# Lamp (glow turns on at night)
 	_add_decor_rect(Rect2(106, 88, 10, 14), Color("FFF8E1"), -84)
@@ -493,6 +498,10 @@ func _wire_director() -> void:
 		_pet.visible = true
 		_director.resume_escort_visuals()
 		_show_toast("Still on leash — town door works; E near pet (off mats) to end walk")
+	# Resume carrying the deceased after backyard visit (if burial not done)
+	elif PetController.carrying_deceased and _pet and PetController.needs_burial():
+		_apply_carry_visuals()
+		_show_toast("Still carrying them — south door to the backyard")
 
 
 func _style_panel_light() -> StyleBoxFlat:
@@ -509,27 +518,43 @@ func _build_hud() -> void:
 	_hud_layer = layer
 	add_child(layer)
 
-	# --- P0 hierarchy: slim top status bar (identity + counters + day chip) ---
+	# --- Single compact top bar (counters + day + nav) — no free-floating overlap ---
 	_top_bar = PanelContainer.new()
 	_top_bar.name = "TopStatusBar"
 	UiThemeScr.apply_panel(_top_bar, true)
-	_top_bar.position = Vector2(12, 8)
+	_top_bar.position = Vector2(10, 8)
 	layer.add_child(_top_bar)
-	var top_v := VBoxContainer.new()
-	top_v.add_theme_constant_override("separation", 2)
-	_top_bar.add_child(top_v)
 	var top_row := HBoxContainer.new()
-	top_row.add_theme_constant_override("separation", 10)
-	top_v.add_child(top_row)
-	_counter = UiThemeScr.title_label("Deaths 0 · Graves 0 · ❤0", 12)
+	top_row.add_theme_constant_override("separation", 8)
+	_top_bar.add_child(top_row)
+	_counter = UiThemeScr.title_label("❤0 · D0 · G0", 12)
 	top_row.add_child(_counter)
 	_day_chip = UiThemeScr.body_label("Day", 11)
 	_day_chip.add_theme_color_override("font_color", UiThemeScr.TEXT_ACCENT)
 	top_row.add_child(_day_chip)
+	var sep := UiThemeScr.body_label("|", 11)
+	top_row.add_child(sep)
+	var b_town := UiThemeScr.themed_button("Town")
+	b_town.custom_minimum_size = Vector2(0, 24)
+	b_town.pressed.connect(_nav_town)
+	top_row.add_child(b_town)
+	var b_yard := UiThemeScr.themed_button("Yard")
+	b_yard.custom_minimum_size = Vector2(0, 24)
+	b_yard.pressed.connect(_nav_yard)
+	top_row.add_child(b_yard)
+	var b_store := UiThemeScr.themed_button("Store")
+	b_store.custom_minimum_size = Vector2(0, 24)
+	b_store.pressed.connect(_nav_store)
+	top_row.add_child(b_store)
+	var b_settings := UiThemeScr.themed_button("⚙")
+	b_settings.custom_minimum_size = Vector2(28, 24)
+	b_settings.pressed.connect(_toggle_settings)
+	top_row.add_child(b_settings)
 	_refresh_day_chip()
+	_build_settings_panel(layer)
 
 	# Context verb line (bottom) — short, not a control essay
-	_hint = UiThemeScr.world_hint_label("Near pet — E Open CARE", 13)
+	_hint = UiThemeScr.world_hint_label("Near pet — E Open CARE", 12)
 	_hint.position = Vector2(16, 680)
 	layer.add_child(_hint)
 
@@ -539,88 +564,77 @@ func _build_hud() -> void:
 	_toast.position = Vector2(400, 640)
 	layer.add_child(_toast)
 
-	# --- Top-right: needs card (shared chrome) ---
+	# --- Compact needs card (no per-bar ETA rows — those made a tall map-blocking sidebar) ---
 	_stats_panel = PanelContainer.new()
 	_stats_panel.visible = false
 	UiThemeScr.apply_panel(_stats_panel, true)
 	_stats_panel.position = Vector2(1000, 8)
 	layer.add_child(_stats_panel)
 	var stats_v := VBoxContainer.new()
-	stats_v.add_theme_constant_override("separation", 6)
+	stats_v.add_theme_constant_override("separation", 3)
 	_stats_panel.add_child(stats_v)
-	_stat_title = UiThemeScr.title_label("Pet", 14)
+	_stat_title = UiThemeScr.title_label("Pet", 12)
 	stats_v.add_child(_stat_title)
-	_stat_forecast = UiThemeScr.body_label("", 11)
-	_stat_forecast.custom_minimum_size = Vector2(220, 0)
-	stats_v.add_child(_stat_forecast)
-	_stat_suggest = UiThemeScr.accent_label("Suggested: —", 12)
-	_stat_suggest.custom_minimum_size = Vector2(220, 0)
+	_stat_suggest = UiThemeScr.accent_label("Suggested: —", 11)
+	_stat_suggest.custom_minimum_size = Vector2(168, 0)
 	stats_v.add_child(_stat_suggest)
+	_stat_forecast = UiThemeScr.body_label("", 10)
+	_stat_forecast.custom_minimum_size = Vector2(168, 0)
+	stats_v.add_child(_stat_forecast)
 	_stat_bars.clear()
 	_stat_value_labs.clear()
 	_stat_eta_labs.clear()
-	var eta_hints := {
-		"hunger": "hungry",
-		"energy": "sleepy",
-		"happiness": "lonely",
-		"hygiene": "dirty",
-	}
 	for stat in ["hunger", "energy", "happiness", "hygiene"]:
-		var block := VBoxContainer.new()
-		block.add_theme_constant_override("separation", 1)
-		stats_v.add_child(block)
 		var row := HBoxContainer.new()
-		block.add_child(row)
-		var lab := UiThemeScr.body_label(stat.substr(0, 3).to_upper(), 12)
-		lab.custom_minimum_size = Vector2(36, 0)
+		row.add_theme_constant_override("separation", 4)
+		stats_v.add_child(row)
+		var lab := UiThemeScr.body_label(stat.substr(0, 3).to_upper(), 11)
+		lab.custom_minimum_size = Vector2(30, 0)
 		lab.add_theme_color_override("font_color", UiThemeScr.TEXT_DARK)
 		row.add_child(lab)
 		var bar := ProgressBar.new()
-		bar.custom_minimum_size = Vector2(110, 16)
+		bar.custom_minimum_size = Vector2(88, 12)
 		bar.max_value = 100.0
 		bar.show_percentage = false
 		UiThemeScr.style_progress_bar(bar, UiThemeScr.BAR_FILL_OK)
 		row.add_child(bar)
 		_stat_bars[stat] = bar
-		var val := UiThemeScr.title_label("80", 13)
-		val.custom_minimum_size = Vector2(36, 0)
+		var val := UiThemeScr.title_label("80", 11)
+		val.custom_minimum_size = Vector2(28, 0)
 		val.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		row.add_child(val)
 		_stat_value_labs[stat] = val
-		var eta := UiThemeScr.body_label("  %s in —" % eta_hints[stat], 10)
-		block.add_child(eta)
-		_stat_eta_labs[stat] = eta
 
 	call_deferred("_place_stats_panel")
 	call_deferred("_place_home_hud")
 
-	# --- CARE menu (bottom-left, product style) ---
+	# --- CARE menu (compact bottom strip — not a tall map-covering sidebar) ---
 	_care_panel = PanelContainer.new()
 	_care_panel.visible = false
 	UiThemeScr.apply_panel(_care_panel, true)
 	_care_panel.position = Vector2(16, 400)
 	layer.add_child(_care_panel)
 	var care_outer := VBoxContainer.new()
-	care_outer.add_theme_constant_override("separation", 4)
+	care_outer.add_theme_constant_override("separation", 2)
 	_care_panel.add_child(care_outer)
-	var care_title := UiThemeScr.title_label("CARE", 18)
+	var care_title := UiThemeScr.title_label("CARE", 14)
 	care_outer.add_child(care_title)
-	var help := UiThemeScr.body_label("Click row · ↑↓ · Z/Enter · X cancel", 11)
+	var help := UiThemeScr.body_label("Click · ↑↓ · Z · X", 10)
 	care_outer.add_child(help)
 	_care_list = VBoxContainer.new()
-	_care_list.add_theme_constant_override("separation", 3)
+	_care_list.add_theme_constant_override("separation", 1)
 	care_outer.add_child(_care_list)
 	_care_labels.clear()
 	_care_row_panels.clear()
 	var names := ["FEED", "WALK", "PLAY", "CLEAN", "SLEEP", "WAKE", "CANCEL"]
 	for i in names.size():
 		var row_p := PanelContainer.new()
-		row_p.custom_minimum_size = Vector2(168, 28)
+		row_p.custom_minimum_size = Vector2(132, 22)
 		row_p.mouse_filter = Control.MOUSE_FILTER_STOP
 		row_p.gui_input.connect(_on_care_row_gui_input.bind(i))
 		var lab2 := Label.new()
 		lab2.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		lab2.add_theme_font_size_override("font_size", 16)
+		lab2.add_theme_font_size_override("font_size", 12)
 		lab2.add_theme_color_override("font_color", Color(0.08, 0.08, 0.10))
 		lab2.text = "  " + names[i]
 		lab2.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -654,26 +668,6 @@ func _build_hud() -> void:
 	_emote.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_world.add_child(_emote)
 
-	# Compact nav (secondary — doors preferred)
-	var nav := HBoxContainer.new()
-	nav.name = "NavShortcuts"
-	nav.position = Vector2(12, 56)
-	nav.add_theme_constant_override("separation", 6)
-	layer.add_child(nav)
-	var b_town := UiThemeScr.themed_button("Town")
-	b_town.pressed.connect(func(): SceneRouter.go("town", "from_house"))
-	nav.add_child(b_town)
-	var b_yard := UiThemeScr.themed_button("Yard")
-	b_yard.pressed.connect(func(): SceneRouter.go("graveyard", "from_house"))
-	nav.add_child(b_yard)
-	var b_settings := UiThemeScr.themed_button("Settings")
-	b_settings.pressed.connect(_toggle_settings)
-	nav.add_child(b_settings)
-	_build_settings_panel(layer)
-	var b_store := UiThemeScr.themed_button("Store")
-	b_store.pressed.connect(func(): SceneRouter.go("pet_store", "from_town"))
-	nav.add_child(b_store)
-
 	_empty_panel = _panel("No pet yet — adopt to begin.")
 	var adopt := Button.new()
 	adopt.text = "Adopt Blob"
@@ -687,14 +681,18 @@ func _build_hud() -> void:
 	layer.add_child(_empty_panel)
 	_empty_panel.position = Vector2(150, 100)
 
-	_death_panel = _panel("Your pet has passed. Use the back door (south) into your backyard to dig a grave.")
-	var go_yard := Button.new()
-	go_yard.text = "Open backyard door"
-	go_yard.pressed.connect(func(): SceneRouter.go("graveyard", "from_house"))
-	_death_panel.get_child(0).add_child(go_yard)
+	# Soft death notice — carry ritual, not a teleport button
+	_death_panel = _panel(
+		"They've passed. E near them to carry — walk the south door to the backyard. Hold E at the plot."
+	)
+	var carry_ack := Button.new()
+	carry_ack.text = "I'll carry them"
+	carry_ack.pressed.connect(func(): _death_panel.visible = false)
+	_death_panel.get_child(0).add_child(carry_ack)
 	layer.add_child(_death_panel)
-	_death_panel.position = Vector2(150, 100)
-	# Dig no longer happens in the house
+	# Bottom-center so it doesn't cover the body / map
+	_death_panel.position = Vector2(180, 520)
+	call_deferred("_place_death_panel")
 	_dig_progress = null
 
 	_debug = Label.new()
@@ -843,6 +841,14 @@ func _place_home_hud() -> void:
 	if _toast:
 		_toast.position = Vector2(vp.x * 0.5 - 160.0, maxf(40.0, vp.y - 72.0))
 		_toast.custom_minimum_size = Vector2(320, 0)
+	_place_death_panel()
+
+
+func _place_death_panel() -> void:
+	if _death_panel == null:
+		return
+	var vp := get_viewport().get_visible_rect().size
+	_death_panel.position = Vector2(clampf(vp.x * 0.5 - 160.0, 12.0, vp.x - 320.0), maxf(80.0, vp.y - 160.0))
 
 
 func _place_care_timer() -> void:
@@ -853,11 +859,58 @@ func _place_care_timer() -> void:
 
 
 func _place_stats_panel() -> void:
-	# Top-right of viewport (wider for numbers + ETAs)
+	# Compact top-right — leave bathroom / map readable
 	if _stats_panel == null:
 		return
 	var vp := get_viewport().get_visible_rect().size
-	_stats_panel.position = Vector2(vp.x - 268, 8)
+	_stats_panel.position = Vector2(maxf(8.0, vp.x - 196.0), 8.0)
+
+
+func _nav_town() -> void:
+	if PetController.carrying_deceased:
+		_show_toast("They're at rest — take the south door to the backyard")
+		return
+	SceneRouter.go("town", "from_house")
+
+
+func _nav_store() -> void:
+	if PetController.carrying_deceased:
+		_show_toast("They're at rest — take the south door to the backyard")
+		return
+	SceneRouter.go("pet_store", "from_town")
+
+
+func _nav_yard() -> void:
+	## No teleport-skip of the carry moment when a body still needs burial.
+	if PetController.needs_burial() and not PetController.carrying_deceased:
+		_show_toast("Pick them up first (E near their body) — then the backyard")
+		return
+	SceneRouter.go("graveyard", "from_house")
+
+
+func _apply_carry_visuals() -> void:
+	if _pet == null or not PetController.carrying_deceased:
+		return
+	_pet.visible = true
+	if _pet.has_method("set_follow") and _human:
+		_pet.set_follow(_human, Vector2(-14, -6))  # held close — carried, not leashed
+	if _pet.has_method("set_collision_enabled"):
+		_pet.set_collision_enabled(false)
+	if _pet.has_method("set_condition"):
+		_pet.set_condition("dead")
+	if _pet.has_method("play_anim"):
+		_pet.play_anim(&"dead")
+
+
+func _try_start_carry() -> bool:
+	var r: Dictionary = PetController.start_carry_deceased()
+	if not r.get("ok", false):
+		return false
+	_apply_carry_visuals()
+	_show_toast("You lift them gently — south door to the backyard")
+	if _death_panel:
+		_death_panel.visible = false
+	return true
 
 
 func _panel(text: String) -> PanelContainer:
@@ -866,7 +919,7 @@ func _panel(text: String) -> PanelContainer:
 	var v := VBoxContainer.new()
 	p.add_child(v)
 	var l := UiThemeScr.body_label(text, 12)
-	l.custom_minimum_size = Vector2(200, 0)
+	l.custom_minimum_size = Vector2(260, 0)
 	l.add_theme_color_override("font_color", UiThemeScr.TEXT_DARK)
 	v.add_child(l)
 	return p
@@ -926,15 +979,15 @@ func _refresh_care_cursor() -> void:
 		if selected:
 			lab.text = "▶ " + base
 			lab.add_theme_color_override("font_color", Color(1.0, 1.0, 0.95))
-			lab.add_theme_font_size_override("font_size", 16)
+			lab.add_theme_font_size_override("font_size", 12)
 		elif not enabled:
 			lab.text = "  " + base
 			lab.add_theme_color_override("font_color", Color(0.55, 0.52, 0.48))
-			lab.add_theme_font_size_override("font_size", 14)
+			lab.add_theme_font_size_override("font_size", 11)
 		else:
 			lab.text = "  " + base
 			lab.add_theme_color_override("font_color", Color(0.08, 0.08, 0.10))
-			lab.add_theme_font_size_override("font_size", 15)
+			lab.add_theme_font_size_override("font_size", 12)
 		if i < _care_row_panels.size():
 			var row: PanelContainer = _care_row_panels[i]
 			row.add_theme_stylebox_override("panel", _style_row(selected, not enabled))
@@ -944,8 +997,8 @@ func _place_care_menu() -> void:
 	if _care_panel == null:
 		return
 	var vp := get_viewport().get_visible_rect().size
-	# Bottom-left, always on screen
-	_care_panel.position = Vector2(16.0, maxf(80.0, vp.y - 320.0))
+	# Compact bottom-left — keep map center free
+	_care_panel.position = Vector2(12.0, maxf(56.0, vp.y - 248.0))
 
 
 func _update_zzz() -> void:
@@ -1155,27 +1208,38 @@ func _process(delta: float) -> void:
 	# Door proximity — short verbs (P0). Doors beat end-walk: pet follow is always "near".
 	if _human and not _care_menu_open and not (_director and _director.is_busy()):
 		if _at_door(DOOR_TOWN):
-			if PetController.escort_active:
+			if PetController.carrying_deceased:
+				_hint.text = "Carrying them — use the south door (backyard)"
+			elif PetController.escort_active:
 				_hint.text = "E Enter town (pet comes with you)"
 			else:
 				_hint.text = "E Enter town"
 		elif _at_door(DOOR_YARD):
 			if PetController.escort_active:
 				_hint.text = "Finish walk first (E near pet) — backyard is for home only"
+			elif PetController.needs_burial() and not PetController.carrying_deceased:
+				_hint.text = "Carry them first (E near body), then enter backyard"
+			elif PetController.carrying_deceased:
+				_hint.text = "E Enter backyard — lay them to rest at the plot"
 			else:
 				_hint.text = "E Enter backyard"
 	if Input.is_action_just_pressed("interact"):
 		if _care_menu_open:
 			_confirm_care_selection()
 			return
-		# Navigation first while leashed — ending walk used to steal E at the door
-		# because the following pet is always within NEAR_PET_DIST.
+		# Navigation first while leashed/carrying — follow keeps pet in interact range.
 		if _at_door(DOOR_TOWN):
+			if PetController.carrying_deceased:
+				_show_toast("They're at rest — take the south door to the backyard")
+				return
 			SceneRouter.go("town", "from_house")
 			return
 		if _at_door(DOOR_YARD):
 			if PetController.escort_active:
 				_show_toast("On a walk — use the town door (left), or E near pet (away from doors) to end")
+				return
+			if PetController.needs_burial() and not PetController.carrying_deceased:
+				_show_toast("Pick them up first (E near their body) — then go outside")
 				return
 			SceneRouter.go("graveyard", "from_house")
 			return
@@ -1186,7 +1250,10 @@ func _process(delta: float) -> void:
 		if _near_pet and PetController.active_pet != null and str(PetController.active_pet.life_state) != "DEAD":
 			_open_care_menu()
 		elif _near_pet and PetController.active_pet != null and str(PetController.active_pet.life_state) == "DEAD":
-			_show_toast("Take them out the back door to the backyard")
+			if PetController.carrying_deceased:
+				_show_toast("South door — carry them to the empty plot")
+			else:
+				_try_start_carry()
 
 
 func _close_care_menu() -> void:
@@ -1283,6 +1350,9 @@ func _update_near_pet_ui() -> void:
 	# Don't overwrite door hints while standing on a door
 	if _at_door(DOOR_TOWN) or _at_door(DOOR_YARD):
 		return
+	if PetController.carrying_deceased and life == "DEAD":
+		_hint.text = "Carrying %s — south door → backyard plot" % str(PetController.active_pet.name)
+		return
 	if PetController.escort_active and life != "DEAD" and life != "":
 		var left := maxf(0.0, PetController.ESCORT_MIN_SEC - PetController.escort_elapsed_sec)
 		if left > 0.0:
@@ -1298,7 +1368,10 @@ func _update_near_pet_ui() -> void:
 	elif PetController.active_pet == null:
 		_hint.text = "No pet — Store to adopt · E Town / Yard doors"
 	elif life == "DEAD":
-		_hint.text = "Pet passed — E Enter backyard · hold E at plot"
+		if _near_pet:
+			_hint.text = "E Carry %s — then south door to backyard" % str(PetController.active_pet.name)
+		else:
+			_hint.text = "Walk to them — E Carry · south door to bury"
 	else:
 		_hint.text = "Walk near pet — E Open CARE"
 
@@ -1619,10 +1692,11 @@ func _on_pet_updated(_snap: Dictionary) -> void:
 
 
 func _on_profile(snap: Dictionary) -> void:
-	_counter.text = "Deaths %d · Graves %d · ❤%d" % [
+	# Compact — fits one top-bar row with nav buttons (no multi-line overlap)
+	_counter.text = "❤%d · D%d · G%d" % [
+		int(snap.get("care_points", PetController.profile.care_points if PetController.profile else 0)),
 		int(snap.get("total_pets_died", 0)),
 		int(snap.get("total_graves_dug", 0)),
-		int(snap.get("care_points", PetController.profile.care_points if PetController.profile else 0)),
 	]
 
 
@@ -1630,12 +1704,26 @@ func _refresh_all() -> void:
 	var has := PetController.active_pet != null
 	var life := str(PetController.active_pet.life_state) if has else ""
 	_empty_panel.visible = not has
-	_death_panel.visible = has and life == "DEAD" and not PetController.active_pet.buried
+	# Death notice only when not already carrying (avoid modal spam during the ritual)
+	var show_death := (
+		has
+		and life == "DEAD"
+		and not PetController.active_pet.buried
+		and not PetController.carrying_deceased
+	)
+	if _death_panel and not show_death:
+		_death_panel.visible = false
+	elif _death_panel and show_death and not _death_panel.visible:
+		# Show once when death first detected this session refresh
+		_death_panel.visible = true
 	_pet.visible = has
 	_on_profile(PetController.profile.to_view_dict(has))
 	_apply_day_night(str(TimeService.local_day_phase()))
 	_update_debug()
-	_apply_pet_condition_visual()
+	if PetController.carrying_deceased and life == "DEAD":
+		_apply_carry_visuals()
+	else:
+		_apply_pet_condition_visual()
 
 
 func _apply_day_night(phase: String) -> void:

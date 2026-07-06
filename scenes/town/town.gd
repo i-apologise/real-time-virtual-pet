@@ -200,7 +200,7 @@ func _maybe_spawn_escort_pet() -> void:
 	_pet.set_follow(_human, Vector2(-22, 10))
 	_pet.set_world_bounds(WORLD_BOUNDS)
 	_leash.visible = true
-	_toast.text = "On leash — E on doorsteps enters (pet follows). End walk off doors."
+	_toast.text = "On leash — E enters buildings (pet follows). Unclip the leash at home."
 
 
 func _process(delta: float) -> void:
@@ -215,8 +215,7 @@ func _process(delta: float) -> void:
 				_world.to_local(_pet.global_position + Vector2(0, -8)),
 			])
 
-	# Resolve nearest building first — leash follow is always <56px, so end-walk
-	# must not consume E while standing on a doorstep (same bug as habitat town door).
+	# Buildings first. Never end-walk in town — pet would vanish mid-outing.
 	var near := ""
 	var scene_id := ""
 	var spawn := ""
@@ -237,23 +236,11 @@ func _process(delta: float) -> void:
 		return
 
 	if PetController.escort_active:
-		_label.text = "On leash — E Enter Park/House/Store · away from doors E End walk · min %.0fs" % maxf(
+		_label.text = "On leash · min %.0fs · doors enter places · end walk at home" % maxf(
 			0.0, PetController.ESCORT_MIN_SEC - PetController.escort_elapsed_sec
 		)
-		if Input.is_action_just_pressed("interact") and _pet:
-			if _human.global_position.distance_to(_pet.global_position) < 56.0:
-				if PetController.can_finish_escort():
-					var r: Dictionary = PetController.end_escort(true)
-					if _pet:
-						_pet.clear_follow()
-						_pet.queue_free()
-						_pet = null
-					_leash.visible = false
-					_toast.text = "Walk complete!" if r.get("ok", false) else "Walk ended"
-				else:
-					_toast.text = "Walk a bit longer… %.0fs" % maxf(
-						0.0, PetController.ESCORT_MIN_SEC - PetController.escort_elapsed_sec
-					)
+		if Input.is_action_just_pressed("interact"):
+			_toast.text = "Still on a walk — enter a building, or go home to unclip the leash."
 		return
 
 	_label.text = "Town — E Enter House · Park · Store"

@@ -518,36 +518,34 @@ func _build_hud() -> void:
 	_hud_layer = layer
 	add_child(layer)
 
-	# --- Single compact top bar (counters + day + nav) — no free-floating overlap ---
+	# --- Slim status strip (not a fat dialog panel) ---
 	_top_bar = PanelContainer.new()
 	_top_bar.name = "TopStatusBar"
-	UiThemeScr.apply_panel(_top_bar, true)
+	_top_bar.add_theme_stylebox_override("panel", UiThemeScr.slim_bar_style())
 	_top_bar.position = Vector2(10, 8)
 	layer.add_child(_top_bar)
 	var top_row := HBoxContainer.new()
-	top_row.add_theme_constant_override("separation", 8)
+	top_row.add_theme_constant_override("separation", 6)
+	top_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	_top_bar.add_child(top_row)
-	_counter = UiThemeScr.title_label("❤0 · D0 · G0", 12)
+	_counter = UiThemeScr.title_label("❤0  D0  G0", 11)
 	top_row.add_child(_counter)
 	_day_chip = UiThemeScr.body_label("Day", 11)
 	_day_chip.add_theme_color_override("font_color", UiThemeScr.TEXT_ACCENT)
 	top_row.add_child(_day_chip)
-	var sep := UiThemeScr.body_label("|", 11)
+	var sep := Control.new()
+	sep.custom_minimum_size = Vector2(6, 0)
 	top_row.add_child(sep)
-	var b_town := UiThemeScr.themed_button("Town")
-	b_town.custom_minimum_size = Vector2(0, 24)
+	var b_town := UiThemeScr.slim_button("Town")
 	b_town.pressed.connect(_nav_town)
 	top_row.add_child(b_town)
-	var b_yard := UiThemeScr.themed_button("Yard")
-	b_yard.custom_minimum_size = Vector2(0, 24)
+	var b_yard := UiThemeScr.slim_button("Yard")
 	b_yard.pressed.connect(_nav_yard)
 	top_row.add_child(b_yard)
-	var b_store := UiThemeScr.themed_button("Store")
-	b_store.custom_minimum_size = Vector2(0, 24)
+	var b_store := UiThemeScr.slim_button("Store")
 	b_store.pressed.connect(_nav_store)
 	top_row.add_child(b_store)
-	var b_settings := UiThemeScr.themed_button("⚙")
-	b_settings.custom_minimum_size = Vector2(28, 24)
+	var b_settings := UiThemeScr.slim_button("Set")
 	b_settings.pressed.connect(_toggle_settings)
 	top_row.add_child(b_settings)
 	_refresh_day_chip()
@@ -681,17 +679,23 @@ func _build_hud() -> void:
 	layer.add_child(_empty_panel)
 	_empty_panel.position = Vector2(150, 100)
 
-	# Soft death notice — carry ritual, not a teleport button
-	_death_panel = _panel(
-		"They've passed. E near them to carry — walk the south door to the backyard. Hold E at the plot."
-	)
-	var carry_ack := Button.new()
-	carry_ack.text = "I'll carry them"
-	carry_ack.pressed.connect(func(): _death_panel.visible = false)
-	_death_panel.get_child(0).add_child(carry_ack)
+	# Soft death strip (slim bar, not a modal dialog blocking the room)
+	_death_panel = PanelContainer.new()
+	_death_panel.add_theme_stylebox_override("panel", UiThemeScr.slim_bar_style())
+	_death_panel.visible = false
 	layer.add_child(_death_panel)
-	# Bottom-center so it doesn't cover the body / map
-	_death_panel.position = Vector2(180, 520)
+	var death_row := HBoxContainer.new()
+	death_row.add_theme_constant_override("separation", 10)
+	_death_panel.add_child(death_row)
+	var death_msg := UiThemeScr.body_label(
+		"They've passed — E near them to carry · south door · hold E at the plot",
+		11
+	)
+	death_msg.custom_minimum_size = Vector2(360, 0)
+	death_row.add_child(death_msg)
+	var carry_ack := UiThemeScr.slim_button("OK")
+	carry_ack.pressed.connect(func(): _death_panel.visible = false)
+	death_row.add_child(carry_ack)
 	call_deferred("_place_death_panel")
 	_dig_progress = null
 
@@ -892,14 +896,15 @@ func _apply_carry_visuals() -> void:
 	if _pet == null or not PetController.carrying_deceased:
 		return
 	_pet.visible = true
-	if _pet.has_method("set_follow") and _human:
-		_pet.set_follow(_human, Vector2(-14, -6))  # held close — carried, not leashed
-	if _pet.has_method("set_collision_enabled"):
-		_pet.set_collision_enabled(false)
+	# Condition BEFORE follow — follow physics must never promote walk/idle while dead
 	if _pet.has_method("set_condition"):
 		_pet.set_condition("dead")
 	if _pet.has_method("play_anim"):
 		_pet.play_anim(&"dead")
+	if _pet.has_method("set_collision_enabled"):
+		_pet.set_collision_enabled(false)
+	if _pet.has_method("set_follow") and _human:
+		_pet.set_follow(_human, Vector2(-14, -6))  # held close — carried, not leashed
 
 
 func _try_start_carry() -> bool:
@@ -1356,9 +1361,9 @@ func _update_near_pet_ui() -> void:
 	if PetController.escort_active and life != "DEAD" and life != "":
 		var left := maxf(0.0, PetController.ESCORT_MIN_SEC - PetController.escort_elapsed_sec)
 		if left > 0.0:
-			_hint.text = "On leash · walk min %.0fs · doors work · then E end walk" % left
+			_hint.text = "On leash · min %.0fs more outside · at home E unclips" % left
 		else:
-			_hint.text = "On leash — E End walk (step off door mats) · or keep exploring"
+			_hint.text = "Home — E near pet (off doors) ends walk · or go out again"
 		return
 	if _near_pet and life != "DEAD" and life != "":
 		if PetController.active_pet.is_sleeping():
@@ -1692,8 +1697,7 @@ func _on_pet_updated(_snap: Dictionary) -> void:
 
 
 func _on_profile(snap: Dictionary) -> void:
-	# Compact — fits one top-bar row with nav buttons (no multi-line overlap)
-	_counter.text = "❤%d · D%d · G%d" % [
+	_counter.text = "❤%d  D%d  G%d" % [
 		int(snap.get("care_points", PetController.profile.care_points if PetController.profile else 0)),
 		int(snap.get("total_pets_died", 0)),
 		int(snap.get("total_graves_dug", 0)),

@@ -127,6 +127,8 @@ func set_follow(target: Node2D, offset: Vector2 = Vector2(-18, 6)) -> void:
 	_follow_offset = offset
 	_acting = false
 	_walk_target = null
+	if is_pet and _condition == "dead":
+		_play_dead_pose()
 
 
 func clear_follow() -> void:
@@ -152,6 +154,17 @@ func play_idle() -> void:
 	var anim2 := "idle_%s" % _facing
 	if _sprite.sprite_frames.has_animation(anim2):
 		_sprite.play(anim2)
+
+
+func _play_dead_pose() -> void:
+	## Force limp/dead art while carried — must not switch to walk/idle.
+	if _sprite == null:
+		return
+	if _sprite.sprite_frames.has_animation(&"dead"):
+		_sprite.sprite_frames.set_animation_loop(&"dead", true)
+		if _sprite.animation != &"dead":
+			_sprite.play(&"dead")
+	_acting = false
 
 
 func _pet_idle_anim() -> StringName:
@@ -203,27 +216,37 @@ func _on_anim_finished() -> void:
 func _physics_process(delta: float) -> void:
 	z_index = int(global_position.y)
 
-	# Leash follow mode (pet or escort)
+	# Leash / carry follow mode (pet or escort)
 	if _follow_target != null and is_instance_valid(_follow_target):
 		var goal: Vector2 = _follow_target.global_position + _follow_offset
 		var to: Vector2 = goal - global_position
+		var carried_dead := is_pet and _condition == "dead"
+		# Body carried limp — slower, never play living walk cycle (looked "alive" on burial path)
+		var speed := move_speed * (0.72 if carried_dead else 1.0)
 		if to.length() > 6.0:
 			var dir := to.normalized()
-			velocity = dir * move_speed
+			velocity = dir * speed
 			move_and_slide()
 			_clamp_to_world()
 			_update_facing(dir)
-			var walk := "walk_%s" % _facing
-			if is_pet and _sprite and _sprite.sprite_frames.has_animation("walk"):
-				if _sprite.animation != &"walk" and not _acting:
-					_sprite.play("walk")
-			elif _sprite and _sprite.sprite_frames.has_animation(walk) and not _acting:
-				if _sprite.animation != walk:
-					_sprite.play(walk)
+			if carried_dead:
+				_play_dead_pose()
+			else:
+				var walk := "walk_%s" % _facing
+				if is_pet and _sprite and _sprite.sprite_frames.has_animation("walk"):
+					if _sprite.animation != &"walk" and not _acting:
+						_sprite.play("walk")
+				elif _sprite and _sprite.sprite_frames.has_animation(walk) and not _acting:
+					if _sprite.animation != walk:
+						_sprite.play(walk)
 		else:
 			velocity = Vector2.ZERO
 			move_and_slide()
 			_clamp_to_world()
+			if carried_dead:
+				_play_dead_pose()
+			elif is_pet and not _acting:
+				play_idle()
 		return
 
 	# Pet idle / walk_to only

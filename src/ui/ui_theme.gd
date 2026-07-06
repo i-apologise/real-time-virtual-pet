@@ -40,6 +40,30 @@ static func panel_style(shadow: bool = true) -> StyleBoxFlat:
 	return sb
 
 
+static func slim_bar_style() -> StyleBoxFlat:
+	## Thin top chrome — avoids fat “dialog” panels in the corner.
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.99, 0.97, 0.90, 0.94)
+	sb.border_color = BORDER_SOFT
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(4)
+	sb.content_margin_left = 8
+	sb.content_margin_right = 8
+	sb.content_margin_top = 4
+	sb.content_margin_bottom = 4
+	return sb
+
+
+static func slim_button(text: String) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.flat = false
+	b.custom_minimum_size = Vector2(0, 22)
+	b.add_theme_font_size_override("font_size", 11)
+	b.focus_mode = Control.FOCUS_NONE
+	return b
+
+
 static func row_style(selected: bool, disabled: bool) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
 	if selected:

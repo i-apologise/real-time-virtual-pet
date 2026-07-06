@@ -208,7 +208,7 @@ func _maybe_escort() -> void:
 	_pet.set_follow(_human, Vector2(-22, 10))
 	_pet.set_world_bounds(WORLD_BOUNDS)
 	_leash.visible = true
-	_toast.text = "On leash — explore · E End walk near pet (after min time)"
+	_toast.text = "On leash — explore · Play fetch · leave south to Town. End leash at home."
 
 
 func _process(delta: float) -> void:
@@ -222,10 +222,10 @@ func _process(delta: float) -> void:
 				_world.to_local(_pet.global_position),
 			])
 
-	# Exit zone before end-walk — following pet is always "near", same as habitat/town.
+	# Exit only — never end the leash here (pet would "vanish home"; unclip at house).
 	if EXIT_TO_TOWN.has_point(_human.position):
 		_label.text = (
-			"E Enter Town (pet follows)"
+			"E Leave to Town (pet stays on leash)"
 			if PetController.escort_active
 			else "E Enter Town"
 		)
@@ -234,22 +234,12 @@ func _process(delta: float) -> void:
 		return
 
 	if PetController.escort_active:
-		_label.text = "On leash · min %.0fs · E End walk (not on exit) · fetch for bonus" % maxf(
+		_label.text = "On leash · walk min %.0fs · fetch for bonus · end walk at home" % maxf(
 			0.0, PetController.ESCORT_MIN_SEC - PetController.escort_elapsed_sec
 		)
-		if Input.is_action_just_pressed("interact") and _pet:
-			if _human.global_position.distance_to(_pet.global_position) < 56.0:
-				if PetController.can_finish_escort():
-					PetController.end_escort(true)
-					_pet.clear_follow()
-					_pet.queue_free()
-					_pet = null
-					_leash.visible = false
-					_toast.text = "Great walk! Pet is happier."
-				else:
-					_toast.text = "A bit more walking… %.0fs" % maxf(
-						0.0, PetController.ESCORT_MIN_SEC - PetController.escort_elapsed_sec
-					)
+		# E mid-park must NOT finish escort — that teleported the pet away mid-outing.
+		if Input.is_action_just_pressed("interact"):
+			_toast.text = "Keep exploring — use Play fetch, or leave south. Unclip the leash at home."
 		return
 
 

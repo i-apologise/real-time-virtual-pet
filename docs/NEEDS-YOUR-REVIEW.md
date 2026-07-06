@@ -1,6 +1,6 @@
 # Needs your review
 
-No open PRs awaiting review.
+**PR #32** — fix: carry burial, compact HUD, houseplant planter  
+https://github.com/i-apologise/real-time-virtual-pet/pull/32
 
-Last merged: **PR #31** — fix: leash walk — E on doors enters (not end walk)  
-https://github.com/i-apologise/real-time-virtual-pet/pull/31
+Carry ritual + top-bar HUD + compact needs/CARE + potted plant.

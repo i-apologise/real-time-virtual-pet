@@ -24,6 +24,10 @@ var _follow_target: Node2D = null  # leash follow
 var _follow_offset: Vector2 = Vector2(-18, 6)
 var _use_world_bounds: bool = false
 var _world_bounds: Rect2 = Rect2(20, 20, 440, 280)
+## Held in arms (burial ritual) — not a leash trail beside the player.
+var _carried_in_hands: bool = false
+var _base_sprite_scale: float = 2.0
+const CARRY_SPRITE_SCALE := 1.05
 
 
 func set_world_bounds(rect: Rect2) -> void:
@@ -81,11 +85,14 @@ func setup_frames(frames: SpriteFrames, scale_mul: float = 2.0) -> void:
 		_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		add_child(_sprite)
 	_sprite.sprite_frames = frames
-	_sprite.scale = Vector2(scale_mul, scale_mul)
+	_base_sprite_scale = scale_mul
+	if not _carried_in_hands:
+		_sprite.scale = Vector2(scale_mul, scale_mul)
 	if not _sprite.animation_finished.is_connected(_on_anim_finished):
 		_sprite.animation_finished.connect(_on_anim_finished)
 	setup_collision(is_pet)
-	play_idle()
+	if not _carried_in_hands:
+		play_idle()
 
 
 func set_condition(condition: String) -> void:
@@ -123,17 +130,70 @@ func set_acting(v: bool) -> void:
 
 
 func set_follow(target: Node2D, offset: Vector2 = Vector2(-18, 6)) -> void:
+	## Living leash trail (or generic follow). Dead burial uses set_carried_in_hands.
+	_carried_in_hands = false
 	_follow_target = target
 	_follow_offset = offset
 	_acting = false
 	_walk_target = null
+	_restore_sprite_transform()
 	if is_pet and _condition == "dead":
+		# Prefer true carry for corpses — callers should use set_carried_in_hands
 		_play_dead_pose()
+
+
+func set_carried_in_hands(carrier: Node2D) -> void:
+	## Burial ritual: small limp body snapped into the human's arms (not walking beside).
+	if carrier == null:
+		return
+	_carried_in_hands = true
+	_follow_target = carrier
+	_follow_offset = Vector2(8, -16)
+	_acting = false
+	_walk_target = null
+	_busy = false
+	velocity = Vector2.ZERO
+	set_collision_enabled(false)
+	_condition = "dead"
+	if _sprite:
+		_sprite.scale = Vector2(CARRY_SPRITE_SCALE, CARRY_SPRITE_SCALE)
+		_sprite.rotation_degrees = -28.0  # limp in arms
+		_sprite.position = Vector2(2, -6)
+		_sprite.modulate = Color(0.92, 0.92, 0.95)
+	_play_dead_pose_frozen()
+	_snap_to_carrier()
 
 
 func clear_follow() -> void:
 	_follow_target = null
+	_carried_in_hands = false
 	velocity = Vector2.ZERO
+	_restore_sprite_transform()
+
+
+func clear_carried_in_hands() -> void:
+	clear_follow()
+
+
+func _restore_sprite_transform() -> void:
+	if _sprite == null:
+		return
+	_sprite.scale = Vector2(_base_sprite_scale, _base_sprite_scale)
+	_sprite.rotation_degrees = 0.0
+	_sprite.position = Vector2(0, -12)
+	_sprite.modulate = Color.WHITE
+
+
+func _play_dead_pose_frozen() -> void:
+	## One still frame — multi-frame limp loops read as “walking/twitching”.
+	if _sprite == null:
+		return
+	if _sprite.sprite_frames.has_animation(&"dead"):
+		_sprite.sprite_frames.set_animation_loop(&"dead", false)
+		_sprite.play(&"dead")
+		_sprite.frame = 0
+		_sprite.pause()
+	_acting = false
 
 
 func is_busy() -> bool:
@@ -213,39 +273,67 @@ func _on_anim_finished() -> void:
 		anim_finished.emit(_sprite.animation)
 
 
+func _arms_offset_for_carrier() -> Vector2:
+	## Hold in front of the torso based on which way the carrier faces.
+	var face := "down"
+	if _follow_target and _follow_target.has_method("get_facing"):
+		face = str(_follow_target.call("get_facing"))
+	match face:
+		"up":
+			return Vector2(0, -20)
+		"left":
+			return Vector2(-10, -15)
+		"right":
+			return Vector2(10, -15)
+		_:
+			return Vector2(6, -14)
+
+
+func _snap_to_carrier() -> void:
+	if _follow_target == null or not is_instance_valid(_follow_target):
+		return
+	var off := _arms_offset_for_carrier() if _carried_in_hands else _follow_offset
+	global_position = _follow_target.global_position + off
+	# Draw on top of carrier so it reads as “in hands”, not a second walker
+	z_index = int(_follow_target.global_position.y) + 8
+	velocity = Vector2.ZERO
+
+
+func get_facing() -> String:
+	return _facing
+
+
 func _physics_process(delta: float) -> void:
+	# In-hands carry: hard-snap to arms every frame (no laggy walk-trail = “pet walking”)
+	if _carried_in_hands and _follow_target != null and is_instance_valid(_follow_target):
+		_snap_to_carrier()
+		_play_dead_pose_frozen()
+		return
+
 	z_index = int(global_position.y)
 
-	# Leash / carry follow mode (pet or escort)
+	# Leash follow mode (living pet on walk)
 	if _follow_target != null and is_instance_valid(_follow_target):
 		var goal: Vector2 = _follow_target.global_position + _follow_offset
 		var to: Vector2 = goal - global_position
-		var carried_dead := is_pet and _condition == "dead"
-		# Body carried limp — slower, never play living walk cycle (looked "alive" on burial path)
-		var speed := move_speed * (0.72 if carried_dead else 1.0)
 		if to.length() > 6.0:
 			var dir := to.normalized()
-			velocity = dir * speed
+			velocity = dir * move_speed
 			move_and_slide()
 			_clamp_to_world()
 			_update_facing(dir)
-			if carried_dead:
-				_play_dead_pose()
-			else:
-				var walk := "walk_%s" % _facing
-				if is_pet and _sprite and _sprite.sprite_frames.has_animation("walk"):
-					if _sprite.animation != &"walk" and not _acting:
-						_sprite.play("walk")
-				elif _sprite and _sprite.sprite_frames.has_animation(walk) and not _acting:
-					if _sprite.animation != walk:
-						_sprite.play(walk)
+			var walk := "walk_%s" % _facing
+			if is_pet and _sprite and _sprite.sprite_frames.has_animation("walk"):
+				if _sprite.animation != &"walk" and not _acting:
+					_sprite.play("walk")
+			elif _sprite and _sprite.sprite_frames.has_animation(walk) and not _acting:
+				if _sprite.animation != walk:
+					_sprite.play(walk)
 		else:
 			velocity = Vector2.ZERO
 			move_and_slide()
 			_clamp_to_world()
-			if carried_dead:
-				_play_dead_pose()
-			elif is_pet and not _acting:
+			if is_pet and not _acting:
 				play_idle()
 		return
 

@@ -180,7 +180,8 @@ func _build() -> void:
 	_dead_pet = AnimatedActorScr.new()
 	_dead_pet.is_pet = true
 	_dead_pet.is_player_controlled = false
-	_dead_pet.position = _human.position + Vector2(-14, -6)
+	_dead_pet.move_speed = 0.0
+	_dead_pet.position = _human.position + Vector2(6, -14)
 	_world.add_child(_dead_pet)
 
 	var layer := CanvasLayer.new()
@@ -258,19 +259,16 @@ func _refresh_state() -> void:
 		_dead_pet.visible = needs_burial
 		if needs_burial:
 			var sid := String(p.species_id)
-			_dead_pet.setup_frames(SpriteFactoryScr.pet_frames(sid), 2.4)
-			_dead_pet.set_condition("dead")
-			_dead_pet.play_anim(&"dead")
+			# Same scale as home pet (2.0); carry mode shrinks further for in-hands pose
+			_dead_pet.setup_frames(SpriteFactoryScr.pet_frames(sid), 2.0)
 			_dead_pet.set_collision_enabled(false)
-			# Emotional path: body follows only while carrying. Otherwise wait by the house door.
 			if PetController.carrying_deceased and _human:
-				# Keep dead condition after setup_frames (which defaults to idle)
-				_dead_pet.set_condition("dead")
-				_dead_pet.play_anim(&"dead")
-				_dead_pet.set_follow(_human, Vector2(-14, -6))
-				_toast.text = "Carrying %s — walk to EMPTY PLOT · hold E to dig" % p.name
+				_dead_pet.set_carried_in_hands(_human)
+				_toast.text = "Carrying %s in your arms — walk to EMPTY PLOT · hold E to dig" % p.name
 			else:
-				if _dead_pet.has_method("clear_follow"):
+				if _dead_pet.has_method("clear_carried_in_hands"):
+					_dead_pet.clear_carried_in_hands()
+				elif _dead_pet.has_method("clear_follow"):
 					_dead_pet.clear_follow()
 				_dead_pet.position = Vector2(240, 120)
 				_dead_pet.set_condition("dead")

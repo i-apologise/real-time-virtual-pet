@@ -896,15 +896,16 @@ func _apply_carry_visuals() -> void:
 	if _pet == null or not PetController.carrying_deceased:
 		return
 	_pet.visible = true
-	# Condition BEFORE follow — follow physics must never promote walk/idle while dead
-	if _pet.has_method("set_condition"):
-		_pet.set_condition("dead")
-	if _pet.has_method("play_anim"):
-		_pet.play_anim(&"dead")
-	if _pet.has_method("set_collision_enabled"):
-		_pet.set_collision_enabled(false)
-	if _pet.has_method("set_follow") and _human:
-		_pet.set_follow(_human, Vector2(-14, -6))  # held close — carried, not leashed
+	# Small limp body snapped into arms — not a full-size walking trail
+	if _pet.has_method("set_carried_in_hands") and _human:
+		_pet.set_carried_in_hands(_human)
+	else:
+		if _pet.has_method("set_condition"):
+			_pet.set_condition("dead")
+		if _pet.has_method("play_anim"):
+			_pet.play_anim(&"dead")
+		if _pet.has_method("set_follow") and _human:
+			_pet.set_follow(_human, Vector2(6, -14))
 
 
 func _try_start_carry() -> bool:
@@ -912,7 +913,7 @@ func _try_start_carry() -> bool:
 	if not r.get("ok", false):
 		return false
 	_apply_carry_visuals()
-	_show_toast("You lift them gently — south door to the backyard")
+	_show_toast("You gather them into your arms — south door to the backyard")
 	if _death_panel:
 		_death_panel.visible = false
 	return true

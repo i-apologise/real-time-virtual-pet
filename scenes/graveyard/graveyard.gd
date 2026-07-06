@@ -264,12 +264,17 @@ func _refresh_state() -> void:
 			_dead_pet.set_collision_enabled(false)
 			# Emotional path: body follows only while carrying. Otherwise wait by the house door.
 			if PetController.carrying_deceased and _human:
+				# Keep dead condition after setup_frames (which defaults to idle)
+				_dead_pet.set_condition("dead")
+				_dead_pet.play_anim(&"dead")
 				_dead_pet.set_follow(_human, Vector2(-14, -6))
 				_toast.text = "Carrying %s — walk to EMPTY PLOT · hold E to dig" % p.name
 			else:
 				if _dead_pet.has_method("clear_follow"):
 					_dead_pet.clear_follow()
 				_dead_pet.position = Vector2(240, 120)
+				_dead_pet.set_condition("dead")
+				_dead_pet.play_anim(&"dead")
 				_toast.text = "They aren't with you — go inside and E Carry them first"
 	if needs_burial and PetController.carrying_deceased:
 		_label.text = "Backyard — bring %s to EMPTY PLOT · hold E dig · north HOUSE DOOR" % p.name

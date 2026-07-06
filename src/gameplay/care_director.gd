@@ -196,7 +196,7 @@ func _begin_leash() -> void:
 	human.set_busy(false)
 	pet.set_busy(false, false)
 	toast.emit(
-		"Leashed! Left door → Town/Park (E on door). End walk with E near pet off door mats."
+		"Leashed! Left door → Town/Park. Explore freely — unclip at home with E near them."
 	)
 	var audio := get_node_or_null("/root/AudioService")
 	if audio and audio.has_method("play"):

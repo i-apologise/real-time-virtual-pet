@@ -180,7 +180,7 @@ func _build() -> void:
 	_dead_pet = AnimatedActorScr.new()
 	_dead_pet.is_pet = true
 	_dead_pet.is_player_controlled = false
-	_dead_pet.position = _plot_pos + Vector2(-48, 8)
+	_dead_pet.position = _human.position + Vector2(-14, -6)
 	_world.add_child(_dead_pet)
 
 	var layer := CanvasLayer.new()
@@ -262,8 +262,19 @@ func _refresh_state() -> void:
 			_dead_pet.set_condition("dead")
 			_dead_pet.play_anim(&"dead")
 			_dead_pet.set_collision_enabled(false)
-	if needs_burial:
-		_label.text = "Backyard — bring %s to EMPTY PLOT · hold E dig · walk north to HOUSE DOOR" % p.name
+			# Emotional path: body follows only while carrying. Otherwise wait by the house door.
+			if PetController.carrying_deceased and _human:
+				_dead_pet.set_follow(_human, Vector2(-14, -6))
+				_toast.text = "Carrying %s — walk to EMPTY PLOT · hold E to dig" % p.name
+			else:
+				if _dead_pet.has_method("clear_follow"):
+					_dead_pet.clear_follow()
+				_dead_pet.position = Vector2(240, 120)
+				_toast.text = "They aren't with you — go inside and E Carry them first"
+	if needs_burial and PetController.carrying_deceased:
+		_label.text = "Backyard — bring %s to EMPTY PLOT · hold E dig · north HOUSE DOOR" % p.name
+	elif needs_burial:
+		_label.text = "Backyard — body still inside · go home and carry them (E)"
 	else:
 		_label.text = "Backyard — walk north to HOUSE DOOR (E) or press Enter house"
 		_dig_panel.visible = false
@@ -288,7 +299,9 @@ func _process(delta: float) -> void:
 		p != null and str(p.life_state) == "DEAD" and not p.buried and not _buried_this_visit
 	)
 
-	if needs_burial and _near_plot and not _near_house:
+	# Dig only when you brought them (carrying) — the walk is the ritual
+	var can_dig := needs_burial and PetController.carrying_deceased and _near_plot and not _near_house
+	if can_dig:
 		_dig_panel.visible = true
 		_label.text = "At the plot — hold E or Space to dig %s's grave" % p.name
 		var holding := Input.is_action_pressed("interact") or Input.is_key_pressed(KEY_SPACE)
@@ -315,7 +328,9 @@ func _process(delta: float) -> void:
 				if _human.has_method("play_idle"):
 					_human.play_idle()
 	else:
-		_dig_panel.visible = needs_burial and _near_plot and not _near_house
+		_dig_panel.visible = false
+		if needs_burial and _near_plot and not PetController.carrying_deceased:
+			_label.text = "Plot ready — but you must carry them from home first"
 		if not _near_plot:
 			_dig_accum = 0.0
 			_dig_bar.value = 0.0

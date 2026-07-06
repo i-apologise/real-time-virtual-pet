@@ -1,6 +1,4 @@
 # Needs your review
 
-**PR #32** — fix: carry burial, compact HUD, houseplant planter  
-https://github.com/i-apologise/real-time-virtual-pet/pull/32
-
-Carry ritual + top-bar HUD + compact needs/CARE + potted plant.
+**PR #33** — fix: dead limp on carry; leash ends only at home; slim HUD  
+https://github.com/i-apologise/real-time-virtual-pet/pull/33
